@@ -1,0 +1,151 @@
+﻿@using DGPM_SPM.Web.Models
+@using Microsoft.Extensions.Options
+@inject AuthTokenStore TokenStore
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+@inject IOptions<AuthOptions> AuthOptionsAccessor
+@implements IDisposable
+
+<div class="top-row ps-3 navbar">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            <span class="brand-title">DGPM</span>
+            <span class="brand-subtitle">經銷商績效管理系統</span>
+        </a>
+    </div>
+</div>
+
+<input type="checkbox" title="開合選單" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="sideNav" aria-label="系統功能選單">
+        @foreach (var module in _modules)
+        {
+            var isOpen = _openGroups.Contains(module.FunctionId ?? module.Title);
+            var isActiveGroup = IsActiveGroup(module);
+
+            <section class="navGroup @(isOpen ? "isOpen" : null)">
+                <button class="navGroupButton @(isActiveGroup ? "isActive" : null)"
+                        type="button"
+                        aria-expanded="@isOpen"
+                        @onclick="() => ToggleGroup(module.FunctionId ?? module.Title)"
+                        @onclick:stopPropagation="true">
+                    <span class="navIcon">@GroupIcon(module.FunctionId)</span>
+                    <span>@module.Title</span>
+                    <span class="chevron">@(isOpen ? "⌃" : "⌄")</span>
+                </button>
+                <div class="navSubItems">
+                    @foreach (var item in module.Children ?? [])
+                    {
+                        if (item.IsExternal)
+                        {
+                            <a class="nav-link"
+                               href="@NavMenuItems.ResolveHref(item, _pgmWebBaseUrl)"
+                               target="_blank"
+                               rel="noopener noreferrer">@item.Title</a>
+                        }
+                        else
+                        {
+                            <NavLink class="nav-link" href="@item.Url">@item.Title</NavLink>
+                        }
+                    }
+                </div>
+            </section>
+        }
+    </nav>
+</div>
+
+@code {
+    // 動態選單：以 /api/auth/menus（SysFun Is_Menu=Y、Is_Enabled=Y）組樹；登入快取為後援。
+    private IReadOnlyList<NavMenuItem> _modules = [];
+    private readonly HashSet<string> _openGroups = new(StringComparer.OrdinalIgnoreCase);
+    private string _pgmWebBaseUrl = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pgmWebBaseUrl = AuthOptionsAccessor.Value.PgmWebBaseUrl ?? string.Empty;
+        await LoadMenusAsync();
+        Navigation.LocationChanged += OnLocationChanged;
+        SyncOpenGroupsFromLocation();
+    }
+
+    private async Task LoadMenusAsync()
+    {
+        var session = await TokenStore.GetAsync();
+        if (session is null)
+        {
+            _modules = [];
+            return;
+        }
+
+        // 每次載入側欄時向 API 重抓（PGM menus 為真相）；啟用／停用與新增功能可於重新整理後生效。
+        var apiResult = await ApiClient.GetMenusAsync();
+        if (apiResult.Succeeded && apiResult.Data is not null)
+        {
+            session.Menus = apiResult.Data;
+            await TokenStore.SetAsync(session);
+            _modules = NavMenuItems.Build(apiResult.Data);
+        }
+        else
+        {
+            _modules = NavMenuItems.Build(session.Menus);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        SyncOpenGroupsFromLocation();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SyncOpenGroupsFromLocation()
+    {
+        foreach (var module in _modules)
+        {
+            if (IsActiveGroup(module))
+                _openGroups.Add(module.FunctionId ?? module.Title);
+        }
+    }
+
+    private void ToggleGroup(string key)
+    {
+        if (!_openGroups.Add(key))
+            _openGroups.Remove(key);
+    }
+
+    private bool IsActiveGroup(NavMenuItem module)
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var path = "/" + relative.Split('?', '#')[0].Trim('/');
+        if (path == "/")
+            path = "/";
+
+        return (module.Children ?? []).Any(item =>
+            !item.IsExternal &&
+            !string.IsNullOrWhiteSpace(item.Url) &&
+            PathsMatch(path, item.Url!));
+    }
+
+    private static bool PathsMatch(string currentPath, string itemUrl)
+    {
+        var target = itemUrl.StartsWith('/') ? itemUrl : "/" + itemUrl;
+        return string.Equals(currentPath, target, StringComparison.OrdinalIgnoreCase)
+               || currentPath.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GroupIcon(string? functionId) => functionId switch
+    {
+        "Masterdata" => "◎",
+        "Permission" => "▧",
+        "SysConfig" => "☷",
+        "KPIIndicator" => "▰",
+        "Syslog" => "≡",
+        "Dashboard" => "▥",
+        _ => "•"
+    };
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

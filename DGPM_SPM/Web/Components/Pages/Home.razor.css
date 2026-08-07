@@ -1,0 +1,47 @@
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.page-desc {
+    color: #6b7280;
+}
+
+.module-card {
+    text-decoration: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.6rem;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    background-color: #ffffff;
+}
+
+    .module-card:hover {
+        box-shadow: 0 0.35rem 0.9rem rgba(31, 41, 55, 0.12);
+        transform: translateY(-2px);
+    }
+
+.module-icon {
+    flex-shrink: 0;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.6rem;
+    color: #ffffff;
+    font-size: 1.15rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.module-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.2rem;
+}
+
+.module-desc {
+    font-size: 0.85rem;
+    color: #6b7280;
+}

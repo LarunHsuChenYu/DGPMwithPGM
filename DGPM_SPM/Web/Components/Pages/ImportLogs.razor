@@ -1,0 +1,313 @@
+@page "/query/import-logs"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>匯入紀錄查詢 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="系統資料查詢" Current="匯入紀錄查詢" />
+
+<div class="mb-3">
+    <h1 class="page-title">匯入紀錄查詢</h1>
+    <p class="page-desc mb-0">查詢 KPI 數據匯入批次日誌，可依狀態與資料年月篩選，點選批次查看摘要與錯誤訊息。</p>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-period">資料年月</label>
+                <input id="filter-period" class="form-control" maxlength="6"
+                       @bind="_filterPeriodYm" placeholder="yyyyMM" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-status">匯入狀態</label>
+                <select id="filter-status" class="form-select" @bind="_filterStatus">
+                    <option value="">全部</option>
+                    <option value="S">成功</option>
+                    <option value="F">失敗</option>
+                    <option value="P">處理中</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_detail is not null)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>批次摘要（批次 #@_detail.BatchId）</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseDetail">關閉</button>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-6 col-md-2">
+                    <div class="small text-secondary">狀態</div>
+                    <span class="badge @ImportStatusBadge(_detail.ImportStatus)">@FormatImportStatus(_detail.ImportStatus)</span>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="small text-secondary">資料年月</div>
+                    <div class="fw-semibold">@FormatPeriod(_detail.PeriodYm)</div>
+                </div>
+                <div class="col-4 col-md-2">
+                    <div class="small text-secondary">總筆數</div>
+                    <div class="fw-semibold">@_detail.TotalRows</div>
+                </div>
+                <div class="col-4 col-md-2">
+                    <div class="small text-secondary">成功</div>
+                    <div class="fw-semibold text-success">@_detail.SuccessRows</div>
+                </div>
+                <div class="col-4 col-md-2">
+                    <div class="small text-secondary">失敗</div>
+                    <div class="fw-semibold @(_detail.FailRows > 0 ? "text-danger" : "")">@_detail.FailRows</div>
+                </div>
+                <div class="col-12 col-md-2">
+                    <div class="small text-secondary">匯入人員</div>
+                    <div>@_detail.ImportUser</div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="small text-secondary">來源說明</div>
+                    <div>@(_detail.FileName ?? "-")</div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="small text-secondary">匯入開始</div>
+                    <div>@FormatTime(_detail.ImportStart)</div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="small text-secondary">匯入結束</div>
+                    <div>@FormatTime(_detail.ImportEnd)</div>
+                </div>
+                <div class="col-12">
+                    <div class="small text-secondary">錯誤訊息</div>
+                    @if (string.IsNullOrWhiteSpace(_detail.ErrorMessage))
+                    {
+                        <div class="text-secondary">無</div>
+                    }
+                    else
+                    {
+                        <div class="text-danger" style="white-space: pre-wrap">@_detail.ErrorMessage</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-end">批次</th>
+                        <th>資料年月</th>
+                        <th>來源說明</th>
+                        <th>狀態</th>
+                        <th class="text-end">總筆數</th>
+                        <th class="text-end">成功</th>
+                        <th class="text-end">失敗</th>
+                        <th>匯入人員</th>
+                        <th>匯入時間</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="10" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="10" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var batch in _page.Datas)
+                        {
+                            <tr class="@(_detail?.BatchId == batch.BatchId ? "table-active" : null)">
+                                <td class="text-end fw-semibold">@batch.BatchId</td>
+                                <td>@FormatPeriod(batch.PeriodYm)</td>
+                                <td class="text-truncate" style="max-width: 16rem" title="@batch.FileName">@batch.FileName</td>
+                                <td><span class="badge @ImportStatusBadge(batch.ImportStatus)">@FormatImportStatus(batch.ImportStatus)</span></td>
+                                <td class="text-end">@batch.TotalRows</td>
+                                <td class="text-end">@batch.SuccessRows</td>
+                                <td class="text-end @(batch.FailRows > 0 ? "text-danger" : "")">@batch.FailRows</td>
+                                <td>@batch.ImportUser</td>
+                                <td>@FormatTime(batch.ImportStart)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            disabled="@_loadingDetail" @onclick="() => ShowDetailAsync(batch.BatchId)">查看</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="匯入紀錄分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private KpiImportBatchPage _page = new();
+    private KpiImportBatchDto? _detail;
+    private string? _filterPeriodYm;
+    private string? _filterStatus;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _loadingDetail;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetKpiImportBatchesAsync(
+                _filterPeriodYm,
+                _filterStatus,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new KpiImportBatchPage();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        var period = _filterPeriodYm?.Trim();
+        if (!string.IsNullOrEmpty(period)
+            && !DateTime.TryParseExact(period, "yyyyMM", null, System.Globalization.DateTimeStyles.None, out _))
+        {
+            _isError = true;
+            _message = "資料年月格式須為 yyyyMM，例如 202607。";
+            return;
+        }
+
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterPeriodYm = null;
+        _filterStatus = null;
+        _detail = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    /// <summary>以單筆 API 重新取得批次，確保摘要為最新狀態（例如處理中 → 成功/失敗）。</summary>
+    private async Task ShowDetailAsync(long batchId)
+    {
+        _loadingDetail = true;
+        ClearMessage();
+        try
+        {
+            var result = await ApiClient.GetKpiImportBatchAsync(batchId, _disposeCts.Token);
+            if (!HandleFailure(result))
+                _detail = result.Data;
+        }
+        finally
+        {
+            _loadingDetail = false;
+        }
+    }
+
+    private void CloseDetail()
+    {
+        _detail = null;
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _isError = true;
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/query/import-logs", replace: true);
+        return true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatPeriod(string periodYm)
+        => periodYm.Length == 6 ? $"{periodYm[..4]}/{periodYm[4..]}" : periodYm;
+
+    private static string FormatTime(DateTime? time)
+        => time.HasValue ? $"{time:yyyy/MM/dd HH:mm}" : "-";
+
+    private static string FormatImportStatus(string status)
+        => status switch
+        {
+            "S" => "成功",
+            "F" => "失敗",
+            "P" => "處理中",
+            _ => status
+        };
+
+    private static string ImportStatusBadge(string status)
+        => status switch
+        {
+            "S" => "text-bg-success",
+            "F" => "text-bg-danger",
+            _ => "text-bg-secondary"
+        };
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

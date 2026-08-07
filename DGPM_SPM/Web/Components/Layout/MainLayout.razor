@@ -1,0 +1,54 @@
+﻿@inherits LayoutComponentBase
+@inject SpmApiClient ApiClient
+@inject SpmAuthenticationStateProvider AuthProvider
+@inject NavigationManager Navigation
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="user-name" title="目前登入使用者">@context.User.Identity?.Name</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm logout-btn"
+                            disabled="@_loggingOut" @onclick="LogoutAsync">
+                        @(_loggingOut ? "登出中…" : "登出")
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    系統發生未預期的錯誤。
+    <a href="." class="reload">重新載入</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _loggingOut;
+
+    private async Task LogoutAsync()
+    {
+        _loggingOut = true;
+        try
+        {
+            // 通知後端更新登出紀錄；即使失敗（連線問題等）仍完成前端登出。
+            await ApiClient.LogoutAsync();
+        }
+        finally
+        {
+            await AuthProvider.SignOutAsync();
+            _loggingOut = false;
+            Navigation.NavigateTo("/login", replace: true);
+        }
+    }
+}

@@ -1,0 +1,66 @@
+/*
+  ParamSet 示範資料補齊（可單獨執行）
+  類別：A001／報表類別
+  細項：AUTH01～AUTH05（與 SET_FUNCTION.FUNCTION_ID、RoleFunctionSet SRS 畫面一致）
+*/
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
+BEGIN TRANSACTION;
+
+DECLARE @Now      DATETIME     = GETDATE();
+DECLARE @SeedUser NVARCHAR(50) = N'SEED';
+
+IF NOT EXISTS (SELECT 1 FROM dbo.[SET_PARAMITEM] WHERE SET_ITEM = N'A001')
+BEGIN
+    INSERT INTO dbo.[SET_PARAMITEM]
+        (SET_ITEM, SET_ITEM_NAME, MEMO, DEL_FLG, CRT_DATE, CRT_USER)
+    VALUES
+        (N'A001', N'報表類別', N'對齊 ParamSet／RoleFunction 系統代碼', 0, @Now, @SeedUser);
+END
+ELSE
+BEGIN
+    UPDATE dbo.[SET_PARAMITEM]
+    SET SET_ITEM_NAME = N'報表類別',
+        DEL_FLG = 0,
+        MDF_DATE = @Now,
+        MDF_USER = @SeedUser
+    WHERE SET_ITEM = N'A001';
+END;
+
+MERGE dbo.[SET_PARAM] AS T
+USING (VALUES
+    (N'A001', N'AUTH01', N'帳號維護', 1),
+    (N'A001', N'AUTH02', N'角色權限設定', 2),
+    (N'A001', N'AUTH03', N'重設密碼', 3),
+    (N'A001', N'AUTH04', N'系統代碼維護', 4),
+    (N'A001', N'AUTH05', N'系統報表', 5)
+) AS S(SET_ITEM, SET_ID, SET_VALUE, SORT_ORDER)
+    ON T.SET_ITEM = S.SET_ITEM AND T.SET_ID = S.SET_ID
+WHEN MATCHED THEN
+    UPDATE SET
+        T.SET_VALUE  = S.SET_VALUE,
+        T.SORT_ORDER = S.SORT_ORDER,
+        T.DEL_FLG    = 0,
+        T.MDF_DATE   = @Now,
+        T.MDF_USER   = @SeedUser
+WHEN NOT MATCHED THEN
+    INSERT (SET_ITEM, SET_ID, SET_VALUE, SORT_ORDER, MEMO, DEL_FLG, CRT_DATE, CRT_USER)
+    VALUES (S.SET_ITEM, S.SET_ID, S.SET_VALUE, S.SORT_ORDER, NULL, 0, @Now, @SeedUser);
+
+COMMIT TRANSACTION;
+
+SELECT
+    B.SET_ITEM     AS [代碼類別ID],
+    A.SET_ITEM_NAME AS [代碼類別],
+    B.SET_ID       AS [代碼],
+    B.SET_VALUE    AS [代碼名稱],
+    B.SORT_ORDER   AS [排序]
+FROM dbo.[SET_PARAMITEM] AS A
+INNER JOIN dbo.[SET_PARAM] AS B
+    ON A.SET_ITEM = B.SET_ITEM
+WHERE A.SET_ITEM = N'A001'
+  AND A.DEL_FLG = 0
+  AND B.DEL_FLG = 0
+ORDER BY B.SORT_ORDER;
+GO

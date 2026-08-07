@@ -1,0 +1,68 @@
+﻿@page "/"
+@inject AuthTokenStore TokenStore
+@inject SpmApiClient ApiClient
+
+<PageTitle>首頁 - DGPM SPM</PageTitle>
+
+<h1 class="page-title">系統首頁</h1>
+<p class="page-desc">請由下方模組或左側選單進入功能頁面。</p>
+
+@if (_loading)
+{
+    <p class="text-secondary">載入中…</p>
+}
+else if (_modules.Count == 0)
+{
+    <div class="alert alert-warning" role="alert">目前沒有可進入的模組，或您沒有功能權限。</div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3">
+        @foreach (var module in _modules)
+        {
+            var style = ModulePresentation.For(module.FunctionId);
+            <div class="col">
+                <a class="module-card card h-100" href="@ModulePresentation.OverviewUrl(module.FunctionId)">
+                    <div class="card-body d-flex align-items-start gap-3">
+                        <div class="module-icon" style="background-color: @style.Color">@style.Abbr</div>
+                        <div>
+                            <div class="module-title">@module.Title</div>
+                            <div class="module-desc">@style.Description</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<NavMenuItem> _modules = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await TokenStore.GetAsync();
+        if (session is null)
+        {
+            _modules = [];
+            _loading = false;
+            return;
+        }
+
+        // 與側欄同源：/api/auth/menus → NavMenuItems.Build
+        var apiResult = await ApiClient.GetMenusAsync();
+        if (apiResult.Succeeded && apiResult.Data is not null)
+        {
+            session.Menus = apiResult.Data;
+            await TokenStore.SetAsync(session);
+            _modules = NavMenuItems.Build(apiResult.Data);
+        }
+        else
+        {
+            _modules = NavMenuItems.Build(session.Menus);
+        }
+
+        _loading = false;
+    }
+}

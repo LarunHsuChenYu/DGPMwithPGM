@@ -1,0 +1,54 @@
+@page "/dashboard"
+@using Microsoft.Extensions.Options
+@inject IOptions<QlikDashboardOptions> DashboardOptions
+
+<PageTitle>經銷商儀錶板 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="經銷商儀錶板" Current="經銷商儀錶板" />
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+        <h1 class="page-title">經銷商儀錶板</h1>
+        <p class="page-desc mb-0">經銷商績效總覽（Qlik Cloud 外部整合）。</p>
+    </div>
+</div>
+
+<div class="alert alert-warning py-2" role="alert">
+    Qlik Cloud 整合待 SDS 定稿：目前為最小可用版本，僅依站台設定嵌入儀錶板，
+    尚未實作正式的 Qlik Cloud 認證與授權整合。
+</div>
+
+<section class="card">
+    <div class="card-body p-0">
+        @if (_embedUri is not null)
+        {
+            <iframe class="dashboard-frame"
+                    src="@_embedUri"
+                    title="經銷商儀錶板（Qlik Cloud）"
+                    allowfullscreen></iframe>
+        }
+        else
+        {
+            <div class="dashboard-placeholder">
+                <div class="placeholder-title">尚未設定 Qlik Cloud 嵌入網址</div>
+                <p class="mb-0">
+                    此區塊預留給 Qlik Cloud 儀錶板嵌入（iframe）。
+                    請於 Web 站台設定 <code>QlikDashboard:EmbedUrl</code>（公開 embed URL，不含 secret）後重新載入；
+                    正式整合方式（App/Sheet、認證、單一登入）待 SDS 定稿後實作。
+                </p>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private Uri? _embedUri;
+
+    protected override void OnInitialized()
+    {
+        // 僅接受設定中的絕對 https URL，避免誤把相對路徑或明碼字串塞進 iframe。
+        var raw = DashboardOptions.Value.EmbedUrl;
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            _embedUri = uri;
+    }
+}

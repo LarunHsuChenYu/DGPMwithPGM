@@ -1,0 +1,658 @@
+@page "/Permission/FunctionList"
+@page "/system/functions"
+@implements IAsyncDisposable
+@inject PgmApiClient ApiClient
+@inject AuthTokenStore TokenStore
+@inject IJSRuntime JS
+
+<PageTitle>系統功能管理 - PGM</PageTitle>
+
+<PageBreadcrumb Module="系統權限管理" Current="系統功能管理" />
+
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <h1 class="page-title mb-0">系統功能管理</h1>
+    <div class="text-secondary small">
+        <span>輸入人員：@(_userName)</span>
+        <span class="ms-3">輸入日期：@_nowText</span>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+
+<section class="panel mb-3">
+    <h2>查詢條件</h2>
+    <div class="row g-3 align-items-end">
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="keyword">功能名稱</label>
+            <input id="keyword" class="form-control" maxlength="50" @bind="_keyword"
+                   placeholder="請輸入功能名稱或代碼" />
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="filter-parent">上層選單</label>
+            <select id="filter-parent" class="form-select" @bind="_filterParentId">
+                <option value="">全部</option>
+                @foreach (var option in _parentOptions)
+                {
+                    <option value="@option.FunId">@option.FunName</option>
+                }
+            </select>
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="form-label" for="action-type">功能類型</label>
+            <select id="action-type" class="form-select" @bind="_actionType">
+                <option value="">全部</option>
+                <option value="M">標題</option>
+                <option value="P">頁面</option>
+                <option value="B">按鈕</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-3 d-flex gap-2 search-actions">
+            <button class="btn btn-outline-secondary" type="button" @onclick="ResetSearchAsync" disabled="@_loading">重設</button>
+            <button class="btn btn-primary" type="button" @onclick="SearchAsync" disabled="@_loading">查詢</button>
+        </div>
+    </div>
+</section>
+
+<section class="panel list-panel mb-3">
+    <div class="panel-title-row">
+        <h2>功能選單列表</h2>
+        <button class="btn btn-primary" type="button" @onclick="StartCreateAsync" disabled="@_loading">＋ 新增功能選單</button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 function-menu-table">
+            <thead>
+                <tr>
+                    <th class="col-action">操作</th>
+                    <th class="col-no">序</th>
+                    <th>功能代碼</th>
+                    <th>功能名稱</th>
+                    <th>上層選單</th>
+                    <th>功能類型</th>
+                    <th>階層序號</th>
+                    <th>選單否</th>
+                    <th>啟用否</th>
+                    <th>說明</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="10" class="empty-cell">載入中…</td></tr>
+                }
+                else if (_page.Datas.Count == 0)
+                {
+                    <tr><td colspan="10" class="empty-cell">查無資料</td></tr>
+                }
+                else
+                {
+                    var rowNo = _page.PageSize <= 0
+                        ? 0
+                        : (_page.Page - 1) * _page.PageSize;
+                    @foreach (var item in _page.Datas)
+                    {
+                        rowNo++;
+                        var selected = _editingFunId == item.FunId;
+                        <tr class="@(selected ? "is-selected" : null)">
+                            <td class="text-nowrap">
+                                <div class="row-actions">
+                                    <button class="table-icon edit" type="button"
+                                            @onclick="() => StartEditAsync(item)" disabled="@_loading" title="編輯">✎</button>
+                                    <button class="table-icon delete" type="button"
+                                            @onclick="() => DeleteAsync(item)" disabled="@_loading" title="刪除">☒</button>
+                                </div>
+                            </td>
+                            <td>@rowNo</td>
+                            <td><span class="code-text">@item.FunId</span></td>
+                            <td>@item.FunName</td>
+                            <td>@(item.ParentName ?? "DGPM 系統")</td>
+                            <td>@ActionTypeLabel(item.ActionType)</td>
+                            <td>@item.SortOrder.ToString("0.##")</td>
+                            <td>@(item.IsMenu == "Y" ? "是" : "否")</td>
+                            <td>@(item.IsEnabled == "Y" ? "是" : "否")</td>
+                            <td class="col-desc">@(item.FunDesc ?? "—")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="功能選單分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+<section id="function-editor"
+         @ref="_editorPanel"
+         tabindex="-1"
+         class="panel editor-panel mb-3 @(_isCreating || _editingFunId is not null ? "is-active" : null)">
+    <h2>功能選單基本資料</h2>
+    <p class="form-hint @(_isCreating || _editingFunId is not null ? "is-mode" : null)">
+        @if (_editingFunId is not null)
+        {
+            <text>正在編輯：@_editingFunId</text>
+        }
+        else if (_isCreating)
+        {
+            <text>正在新增功能選單，請填寫下方資料後按儲存。</text>
+        }
+        else
+        {
+            <text>請選擇列表「編輯」帶入資料，或按「＋ 新增功能選單」開始新增。</text>
+        }
+    </p>
+    <p class="form-hint text-secondary mb-2">
+        左側選單歸屬依「上層選單」；「階層序號」僅決定同層排序（慣例：基本資料 1.x、權限 2.x、系統參數 3.x…）。
+        變更後請重新整理頁面以更新側欄。
+    </p>
+    @if (!string.IsNullOrWhiteSpace(_sortHint))
+    {
+        <div class="alert alert-warning py-2" role="status">@_sortHint</div>
+    }
+    <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="row g-3">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="editor-parent">上層選單</label>
+                <InputSelect id="editor-parent" class="form-select" @bind-Value="_editModel.ParentId"
+                             @bind-Value:after="OnParentChanged"
+                             disabled="@(_editModel.ActionType == "M")">
+                    <option value="">DGPM 系統</option>
+                    @foreach (var option in _editorParentOptions)
+                    {
+                        <option value="@option.FunId">@option.FunName（@option.SortOrder.ToString("0.##")）</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="editor-name">功能名稱 <span class="text-danger">*</span></label>
+                <InputText id="editor-name" class="form-control" @bind-Value="_editModel.FunName" />
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="editor-code">功能代碼 <span class="text-danger">*</span></label>
+                <InputText id="editor-code" class="form-control" @bind-Value="_editModel.FunId"
+                           disabled="@(_editingFunId is not null)" />
+                @if (_editingFunId is not null)
+                {
+                    <div class="form-text">功能代碼建立後不可修改。</div>
+                }
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="editor-desc">說明</label>
+                <InputTextArea id="editor-desc" class="form-control" rows="1" @bind-Value="_editModel.FunDesc" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">功能類型 <span class="text-danger">*</span></label>
+                <InputSelect class="form-select w-auto" @bind-Value="_editModel.ActionType" @bind-Value:after="OnActionTypeChanged">
+                    <option value="M">標題</option>
+                    <option value="P">頁面</option>
+                    <option value="B">按鈕</option>
+                </InputSelect>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="editor-route">前端路由或URL</label>
+                <InputText id="editor-route" class="form-control" @bind-Value="_editModel.UrlPath"
+                           placeholder="例如 /Permission/FunctionList" />
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label" for="editor-level">階層序號 <span class="text-danger">*</span></label>
+                <InputNumber id="editor-level" class="form-control" @bind-Value="_editModel.SortOrder"
+                             @bind-Value:after="RefreshSortHint" />
+                <div class="form-text">同層排序用；與上層前綴不一致時僅警告，不擋儲存。</div>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="editor-menu">選單否 <span class="text-danger">*</span></label>
+                <InputSelect id="editor-menu" class="form-select" @bind-Value="_editModel.IsMenu">
+                    <option value="">請選擇</option>
+                    <option value="Y">是</option>
+                    <option value="N">否</option>
+                </InputSelect>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="editor-enabled">啟用否 <span class="text-danger">*</span></label>
+                <InputSelect id="editor-enabled" class="form-select" @bind-Value="_editModel.IsEnabled">
+                    <option value="Y">是</option>
+                    <option value="N">否</option>
+                </InputSelect>
+            </div>
+            <div class="col-12">
+                <div class="form-text">選單否＝是且啟用否＝是的頁面功能，需填寫 Url 後才會出現在左側選單；變更後請重新整理頁面。</div>
+            </div>
+        </div>
+        <div class="d-flex gap-2 mt-3 form-actions">
+            <button class="btn btn-outline-secondary" type="button" @onclick="CancelEdit" disabled="@_saving">取消</button>
+            <button class="btn btn-outline-secondary" type="button" @onclick="ClearEditor" disabled="@_saving">清除</button>
+            <button class="btn btn-primary" type="submit" disabled="@_saving">儲存</button>
+        </div>
+    </EditForm>
+</section>
+
+@code {
+    // SRS 2.2.6：讀取失敗／資料庫更新失敗固定文案
+    private const string ReadFailureMessage = "無法讀取資料，請再確認。";
+    private const string UpdateFailureMessage = "資料庫更新失敗，其他功能不受影響。";
+
+    private PagedResult<FunctionDto> _page = new();
+    private List<FunctionOptionDto> _parentOptions = [];
+    private List<FunctionOptionDto> _editorParentOptions = [];
+    private SaveFunctionRequest _editModel = CreateDefaultEditModel();
+    private string? _editingFunId;
+    private bool _isCreating;
+    private bool _pendingRevealEditor;
+    private ElementReference _editorPanel;
+    private IJSObjectReference? _jsModule;
+    private string _keyword = string.Empty;
+    private string _filterParentId = string.Empty;
+    private string _actionType = string.Empty;
+    private int _pageSize = 10;
+    private string _message = string.Empty;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private string _sortHint = string.Empty;
+    private string _userName = "—";
+    private string _nowText = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await TokenStore.GetAsync();
+        _userName = session?.User?.UserName ?? session?.User?.UserId ?? "—";
+        _nowText = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        await LoadFilterOptionsAsync();
+        await LoadEditorOptionsAsync(null);
+        await LoadPageAsync(1);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>(
+                    "import", "./Components/Pages/Permission/FunctionList.razor.js");
+            }
+            catch (JSException)
+            {
+                // 模組載入失敗時仍可用，僅略過自動捲動
+            }
+        }
+
+        if (!_pendingRevealEditor)
+            return;
+
+        _pendingRevealEditor = false;
+        await RevealEditorAsync();
+    }
+
+    private async Task RevealEditorAsync()
+    {
+        try
+        {
+            if (_jsModule is not null)
+            {
+                await _jsModule.InvokeVoidAsync("revealEditor", _editorPanel, "editor-name");
+                return;
+            }
+
+            // 後備：至少把焦點帶到編輯區（瀏覽器通常會捲動到可見）
+            await _editorPanel.FocusAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private void RequestRevealEditor() => _pendingRevealEditor = true;
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetFunctionListAsync(
+                _keyword, _filterParentId, _actionType, page, _pageSize);
+            if (result.Succeeded && result.Data is not null)
+            {
+                _page = result.Data;
+                return;
+            }
+
+            ShowError(ReadFailureMessage);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadFilterOptionsAsync()
+    {
+        var result = await ApiClient.GetFunctionParentOptionsAsync();
+        if (result.Succeeded)
+            _parentOptions = result.Data ?? [];
+        else
+            ShowError(ReadFailureMessage);
+    }
+
+    private async Task LoadEditorOptionsAsync(string? excludeFunId)
+    {
+        var result = await ApiClient.GetFunctionOptionsAsync(excludeFunId);
+        if (result.Succeeded)
+            _editorParentOptions = result.Data ?? [];
+        else
+            ShowError(ReadFailureMessage);
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _keyword = string.Empty;
+        _filterParentId = string.Empty;
+        _actionType = string.Empty;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task StartCreateAsync()
+    {
+        _editingFunId = null;
+        _isCreating = true;
+        _editModel = CreateDefaultEditModel();
+        ClearMessage();
+        RefreshSortHint();
+        RequestRevealEditor();
+        await LoadEditorOptionsAsync(null);
+    }
+
+    private async Task StartEditAsync(FunctionDto item)
+    {
+        _editingFunId = item.FunId;
+        _isCreating = false;
+        _editModel = new SaveFunctionRequest
+        {
+            FunId = item.FunId,
+            FunName = item.FunName,
+            ParentId = item.ParentId,
+            ActionType = item.ActionType,
+            UrlPath = item.UrlPath,
+            SortOrder = item.SortOrder,
+            IsMenu = item.IsMenu,
+            IsEnabled = item.IsEnabled,
+            FunDesc = item.FunDesc
+        };
+        ClearMessage();
+        RefreshSortHint();
+        RequestRevealEditor();
+        await LoadEditorOptionsAsync(item.FunId);
+    }
+
+    private void CancelEdit()
+    {
+        _editingFunId = null;
+        _isCreating = false;
+        _editModel = CreateDefaultEditModel();
+        _sortHint = string.Empty;
+    }
+
+    private void ClearEditor()
+    {
+        var keepId = _editingFunId;
+        _editModel = CreateDefaultEditModel();
+        if (keepId is not null)
+            _editModel.FunId = keepId;
+        RefreshSortHint();
+    }
+
+    private void OnActionTypeChanged()
+    {
+        if (_editModel.ActionType == "M")
+            _editModel.ParentId = null;
+        RefreshSortHint();
+    }
+
+    private void OnParentChanged()
+    {
+        if (_editModel.ActionType == "M")
+        {
+            RefreshSortHint();
+            return;
+        }
+
+        var parent = FindParentOption(_editModel.ParentId);
+        if (parent is not null)
+        {
+            var suggested = SuggestChildSortOrder(parent.SortOrder);
+            // 新增時自動建議；編輯時僅在前綴不一致時更新提示，不強制覆寫使用者輸入
+            if (_editingFunId is null)
+                _editModel.SortOrder = suggested;
+        }
+
+        RefreshSortHint();
+    }
+
+    private void RefreshSortHint()
+    {
+        _sortHint = string.Empty;
+        if (_editModel.ActionType == "M" || string.IsNullOrWhiteSpace(_editModel.ParentId))
+            return;
+
+        var parent = FindParentOption(_editModel.ParentId);
+        if (parent is null)
+            return;
+
+        var parentMajor = (int)Math.Floor(parent.SortOrder);
+        var childMajor = (int)Math.Floor(_editModel.SortOrder);
+        if (parentMajor == childMajor)
+            return;
+
+        var suggested = SuggestChildSortOrder(parent.SortOrder);
+        _sortHint =
+            $"階層序號 {_editModel.SortOrder:0.##} 的前綴與上層「{parent.FunName}」（{parent.SortOrder:0.##}）不一致；" +
+            $"左側仍會顯示在該上層之下。建議改為約 {suggested:0.##}（慣例與種子資料一致）。";
+    }
+
+    private FunctionOptionDto? FindParentOption(string? parentId)
+    {
+        if (string.IsNullOrWhiteSpace(parentId))
+            return null;
+        return _editorParentOptions.FirstOrDefault(x =>
+                   x.FunId.Equals(parentId, StringComparison.OrdinalIgnoreCase))
+               ?? _parentOptions.FirstOrDefault(x =>
+                   x.FunId.Equals(parentId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static decimal SuggestChildSortOrder(decimal parentSortOrder)
+    {
+        var major = Math.Floor(parentSortOrder);
+        return major + 0.10m;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            if (_editModel.ActionType == "M")
+                _editModel.ParentId = null;
+
+            RefreshSortHint();
+
+            var result = _editingFunId is not null
+                ? await ApiClient.UpdateFunctionAsync(_editingFunId, _editModel)
+                : await ApiClient.CreateFunctionAsync(_editModel);
+
+            if (!result.Succeeded)
+            {
+                // 業務檢核（參數／重複／不存在等）保留 API 訊息；其餘視為資料庫／傳輸失敗
+                var message = IsBusinessValidationError(result.ErrorCode)
+                    ? result.ErrorMessage
+                    : (string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? UpdateFailureMessage
+                        : result.ErrorMessage);
+                if (result.HttpStatusCode is 405)
+                    message = result.ErrorMessage;
+                else if (!IsBusinessValidationError(result.ErrorCode) &&
+                         result.HttpStatusCode is >= 400 and not 405)
+                    message = $"{UpdateFailureMessage} {result.ErrorMessage}".Trim();
+
+                ShowError(FormatErrorWithTrace(message, result.TraceId, result.HttpStatusCode));
+                return;
+            }
+
+            _editingFunId = null;
+            _isCreating = false;
+            _editModel = CreateDefaultEditModel();
+            _sortHint = string.Empty;
+            ShowSuccess("功能資料已儲存。");
+            await LoadFilterOptionsAsync();
+            await LoadEditorOptionsAsync(null);
+            await LoadPageAsync(_page.Page < 1 ? 1 : _page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(FunctionDto item)
+    {
+        ClearMessage();
+        _loading = true;
+        try
+        {
+            // SRS：先檢核子層／角色引用，通過後才顯示確認彈窗
+            var canDelete = await ApiClient.CanDeleteFunctionAsync(item.FunId);
+            if (!canDelete.Succeeded || canDelete.Data is not true)
+            {
+                ShowError(string.IsNullOrWhiteSpace(canDelete.ErrorMessage)
+                    ? "已設定子層功能/已設定角色權限，不能刪除!"
+                    : canDelete.ErrorMessage);
+                return;
+            }
+
+            var confirmed = await JS.InvokeAsync<bool>("confirm", "確認刪除功能選單？");
+            if (!confirmed)
+                return;
+
+            var result = await ApiClient.DeleteFunctionAsync(item.FunId);
+            if (!result.Succeeded)
+            {
+                ShowError(result.ErrorMessage);
+                return;
+            }
+
+            ShowSuccess("功能選單已刪除。");
+            if (_editingFunId == item.FunId)
+                CancelEdit();
+            await LoadFilterOptionsAsync();
+            await LoadEditorOptionsAsync(null);
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static SaveFunctionRequest CreateDefaultEditModel() => new()
+    {
+        ActionType = "P",
+        IsMenu = string.Empty,
+        IsEnabled = "N",
+        SortOrder = 1
+    };
+
+    private static string ActionTypeLabel(string actionType) => actionType switch
+    {
+        "M" => "標題",
+        "P" => "頁面",
+        "B" => "按鈕",
+        _ => actionType
+    };
+
+    /// <summary>業務檢核錯誤碼（對應 PgmApiClient.MapBusinessError），非資料庫更新失敗。</summary>
+    private static bool IsBusinessValidationError(string errorCode) =>
+        errorCode is "200" or "300" or "404" or "409";
+
+    private void ShowSuccess(string message)
+    {
+        _message = message;
+        _isError = false;
+    }
+
+    private void ShowError(string message)
+    {
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗，請稍後再試。" : message;
+        _isError = true;
+    }
+
+    private static string FormatErrorWithTrace(string message, string? traceId, int httpStatus)
+    {
+        var parts = new List<string> { message };
+        if (httpStatus > 0)
+            parts.Add($"HTTP {httpStatus}");
+        if (!string.IsNullOrWhiteSpace(traceId))
+            parts.Add($"追蹤 {traceId}");
+        return string.Join("｜", parts);
+    }
+
+    private void ClearMessage()
+    {
+        _message = string.Empty;
+        _isError = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsModule is null)
+            return;
+
+        try
+        {
+            await _jsModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

@@ -1,0 +1,355 @@
+@page "/parameters/exchange-rates"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>匯率參數設定 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="系統參數管理" Current="匯率參數設定" />
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+        <h1 class="page-title">匯率參數設定</h1>
+        <p class="page-desc mb-0">查詢及維護各幣別每月匯率，並控制資料啟用狀態。</p>
+    </div>
+    <button type="button" class="btn btn-primary" @onclick="StartCreate">新增匯率</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-currency">幣別</label>
+                <input id="filter-currency" class="form-control text-uppercase" maxlength="3"
+                       @bind="_filterCurrency" placeholder="例如 USD" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-from">生效年月起</label>
+                <input id="filter-from" class="form-control" maxlength="6"
+                       @bind="_filterFrom" placeholder="yyyyMM" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-to">生效年月迄</label>
+                <input id="filter-to" class="form-control" maxlength="6"
+                       @bind="_filterTo" placeholder="yyyyMM" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-status">狀態</label>
+                <select id="filter-status" class="form-select" @bind="_filterStatus">
+                    <option value="">全部</option>
+                    <option value="A">啟用</option>
+                    <option value="I">停用</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_showEditor)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header">@(_editingRateId.HasValue ? "編輯匯率" : "新增匯率")</div>
+        <div class="card-body">
+            <EditForm @key="_editVersion" Model="_editModel" OnValidSubmit="SaveAsync" FormName="exchange-rate-edit">
+                <DataAnnotationsValidator />
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="edit-currency">幣別</label>
+                        <InputText id="edit-currency" class="form-control text-uppercase" maxlength="3"
+                                   @bind-Value="_editModel.CurrencyCode" />
+                        <ValidationMessage For="() => _editModel.CurrencyCode" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="edit-rate-ym">生效年月</label>
+                        <InputText id="edit-rate-ym" class="form-control" maxlength="6"
+                                   @bind-Value="_editModel.RateYm" placeholder="yyyyMM" />
+                        <ValidationMessage For="() => _editModel.RateYm" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="edit-rate-value">匯率</label>
+                        <InputNumber id="edit-rate-value" class="form-control" step="0.000001"
+                                     @bind-Value="_editModel.RateValue" />
+                        <ValidationMessage For="() => _editModel.RateValue" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="edit-memo">備註</label>
+                        <InputTextArea id="edit-memo" class="form-control" rows="2" maxlength="500"
+                                       @bind-Value="_editModel.Memo" />
+                        <ValidationMessage For="() => _editModel.Memo" />
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" disabled="@_saving">
+                            @(_saving ? "儲存中…" : "儲存")
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="CancelEdit">取消</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>幣別</th>
+                        <th>生效年月</th>
+                        <th class="text-end">匯率</th>
+                        <th>狀態</th>
+                        <th>備註</th>
+                        <th>最後異動</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="7" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="7" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _page.Datas)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@item.CurrencyCode</td>
+                                <td>@FormatRateYm(item.RateYm)</td>
+                                <td class="text-end">@item.RateValue.ToString("0.######")</td>
+                                <td>
+                                    <span class="badge @(item.Status == "A" ? "text-bg-success" : "text-bg-secondary")">
+                                        @(item.Status == "A" ? "啟用" : "停用")
+                                    </span>
+                                </td>
+                                <td class="memo-cell">@item.Memo</td>
+                                <td>@FormatModified(item)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                            disabled="@_saving" @onclick="() => StartEdit(item)">編輯</button>
+                                    <button type="button"
+                                            class="btn btn-sm @(item.Status == "A" ? "btn-outline-danger" : "btn-outline-success")"
+                                            disabled="@_saving"
+                                            @onclick="() => ToggleStatusAsync(item)">
+                                        @(item.Status == "A" ? "停用" : "啟用")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="匯率分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private ExchangeRatePage _page = new();
+    private SaveExchangeRateRequest _editModel = new();
+    private int? _editingRateId;
+    private int _editVersion;
+    private string? _filterCurrency;
+    private string? _filterFrom;
+    private string? _filterTo;
+    private string? _filterStatus;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetExchangeRatesAsync(
+                _filterCurrency,
+                _filterFrom,
+                _filterTo,
+                _filterStatus,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new ExchangeRatePage();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterCurrency = null;
+        _filterFrom = null;
+        _filterTo = null;
+        _filterStatus = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void StartCreate()
+    {
+        _editingRateId = null;
+        _editModel = new SaveExchangeRateRequest();
+        _editVersion++;
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void StartEdit(ExchangeRateDto item)
+    {
+        _editingRateId = item.RateId;
+        _editModel = new SaveExchangeRateRequest
+        {
+            CurrencyCode = item.CurrencyCode,
+            RateYm = item.RateYm,
+            RateValue = item.RateValue,
+            Memo = item.Memo
+        };
+        _editVersion++;
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void CancelEdit()
+    {
+        _showEditor = false;
+        _editingRateId = null;
+        ClearMessage();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            ApiResult<ExchangeRateDto> result = _editingRateId.HasValue
+                ? await ApiClient.UpdateExchangeRateAsync(_editingRateId.Value, _editModel, _disposeCts.Token)
+                : await ApiClient.CreateExchangeRateAsync(_editModel, _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            _message = _editingRateId.HasValue ? "匯率已更新。" : "匯率已新增。";
+            _showEditor = false;
+            _editingRateId = null;
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(ExchangeRateDto item)
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var newStatus = item.Status == "A" ? "I" : "A";
+            var result = await ApiClient.SetExchangeRateStatusAsync(
+                item.RateId,
+                newStatus,
+                _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            _message = newStatus == "A" ? "匯率已啟用。" : "匯率已停用。";
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _isError = true;
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/parameters/exchange-rates", replace: true);
+        return true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatRateYm(string value)
+        => value.Length == 6 ? $"{value[..4]}/{value[4..]}" : value;
+
+    private static string FormatModified(ExchangeRateDto item)
+    {
+        var date = item.MdfDate ?? item.CrtDate;
+        var user = item.MdfUser ?? item.CrtUser;
+        return date.HasValue ? $"{date:yyyy/MM/dd HH:mm} {user}".Trim() : user ?? string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

@@ -1,0 +1,13 @@
+<Solution>
+  <Project Path="Api/PGM.Api.csproj" />
+  <Project Path="Core/PGM.Core.csproj" />
+  <Project Path="Infrastructure/PGM.Infrastructure.csproj" />
+  <Project Path="Web/PGM.Web.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Core.Tests/PGM.Core.Tests.csproj" />
+    <Project Path="tests/Api.Tests/PGM.Api.Tests.csproj" />
+    <Project Path="tests/Architecture.Tests/PGM.Architecture.Tests.csproj" />
+    <Project Path="tests/Web.Tests/PGM.Web.Tests.csproj" />
+    <Project Path="tests/Integration.Tests/PGM.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

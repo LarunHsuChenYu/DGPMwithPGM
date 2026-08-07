@@ -1,0 +1,273 @@
+@page "/query/kpi-changes"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>KPI 異動查詢 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="系統資料查詢" Current="KPI 異動查詢" />
+
+<div class="mb-3">
+    <h1 class="page-title">KPI 異動查詢</h1>
+    <p class="page-desc mb-0">查詢 KPI 數據的匯入、修改、覆核與解鎖異動紀錄（僅供查詢）。</p>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert alert-danger py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-period">資料年月</label>
+                <input id="filter-period" class="form-control" maxlength="6"
+                       @bind="_filterPeriodYm" placeholder="yyyyMM" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label class="form-label" for="filter-keyword">關鍵字</label>
+                <input id="filter-keyword" class="form-control" maxlength="200"
+                       @bind="_filterKeyword" placeholder="經銷商或指標的代碼、名稱" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-action-type">異動類型</label>
+                <select id="filter-action-type" class="form-select" @bind="_filterActionType">
+                    <option value="">全部</option>
+                    <option value="I">匯入</option>
+                    <option value="M">修改</option>
+                    <option value="R">覆核</option>
+                    <option value="U">解鎖</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-date-from">異動日期（起）</label>
+                <input id="filter-date-from" type="date" class="form-control" @bind="_filterActionDateFrom" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-date-to">異動日期（迄）</label>
+                <input id="filter-date-to" type="date" class="form-control" @bind="_filterActionDateTo" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-action-user">操作者</label>
+                <input id="filter-action-user" class="form-control" maxlength="50"
+                       @bind="_filterActionUser" placeholder="使用者帳號" />
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>異動時間</th>
+                        <th>資料年月</th>
+                        <th>經銷商</th>
+                        <th>KPI 指標</th>
+                        <th>異動類型</th>
+                        <th class="text-end">異動摘要</th>
+                        <th>原因 / 備註</th>
+                        <th>操作者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="8" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="8" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _page.Datas)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@FormatActionDate(item.ActionDate)</td>
+                                <td>@FormatPeriod(item.PeriodYm)</td>
+                                <td>
+                                    <span class="fw-semibold">@item.DealerCode</span>
+                                    <span class="d-block small text-secondary">@item.DealerName</span>
+                                </td>
+                                <td>
+                                    <span class="fw-semibold">@item.IndicatorCode</span>
+                                    <span class="d-block small text-secondary">@item.IndicatorName</span>
+                                </td>
+                                <td>
+                                    <span class="badge @ActionTypeBadge(item.ActionType)">
+                                        @FormatActionType(item.ActionType)
+                                    </span>
+                                </td>
+                                <td class="text-end text-nowrap">@FormatChangeSummary(item)</td>
+                                <td>@(string.IsNullOrWhiteSpace(item.Reason) ? "-" : item.Reason)</td>
+                                <td>@item.ActionUser</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="KPI 異動分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private PagedResult<KpiChangeLogDto> _page = new();
+    private string? _filterPeriodYm;
+    private string? _filterKeyword;
+    private string? _filterActionType;
+    private DateTime? _filterActionDateFrom;
+    private DateTime? _filterActionDateTo;
+    private string? _filterActionUser;
+    private string? _message;
+    private bool _loading;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetKpiChangeLogsAsync(
+                _filterPeriodYm,
+                _filterKeyword,
+                _filterActionType,
+                _filterActionDateFrom,
+                _filterActionDateTo,
+                _filterActionUser,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new PagedResult<KpiChangeLogDto>();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        var period = _filterPeriodYm?.Trim();
+        if (!string.IsNullOrEmpty(period)
+            && !DateTime.TryParseExact(period, "yyyyMM", null, System.Globalization.DateTimeStyles.None, out _))
+        {
+            _message = "資料年月格式須為 yyyyMM，例如 202607。";
+            return;
+        }
+
+        if (_filterActionDateFrom.HasValue && _filterActionDateTo.HasValue
+            && _filterActionDateFrom.Value.Date > _filterActionDateTo.Value.Date)
+        {
+            _message = "異動日期（起）不可晚於異動日期（迄）。";
+            return;
+        }
+
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterPeriodYm = null;
+        _filterKeyword = null;
+        _filterActionType = null;
+        _filterActionDateFrom = null;
+        _filterActionDateTo = null;
+        _filterActionUser = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/query/kpi-changes", replace: true);
+        return true;
+    }
+
+    private void ClearMessage() => _message = null;
+
+    private static string FormatActionDate(DateTime? actionDate)
+        => actionDate?.ToString("yyyy/MM/dd HH:mm:ss") ?? "-";
+
+    private static string FormatPeriod(string? periodYm)
+        => periodYm?.Length == 6 ? $"{periodYm[..4]}/{periodYm[4..]}" : periodYm ?? "-";
+
+    private static string FormatValue(decimal? value)
+        => value?.ToString("#,##0.######") ?? "-";
+
+    /// <summary>異動摘要：匯入僅顯示新值，其餘顯示「異動前 → 異動後」。</summary>
+    private static string FormatChangeSummary(KpiChangeLogDto item)
+        => item.ActionType == "I"
+            ? FormatValue(item.NewValue)
+            : $"{FormatValue(item.OldValue)} → {FormatValue(item.NewValue)}";
+
+    private static string FormatActionType(string actionType)
+        => actionType switch
+        {
+            "I" => "匯入",
+            "M" => "修改",
+            "R" => "覆核",
+            "U" => "解鎖",
+            _ => actionType
+        };
+
+    private static string ActionTypeBadge(string actionType)
+        => actionType switch
+        {
+            "I" => "text-bg-info",
+            "M" => "text-bg-primary",
+            "R" => "text-bg-success",
+            "U" => "text-bg-warning",
+            _ => "text-bg-secondary"
+        };
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

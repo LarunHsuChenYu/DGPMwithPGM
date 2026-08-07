@@ -1,0 +1,35 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vs/
+.cursor/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+
+# Logs / temp
+*.log
+test-out.txt
+extracted_spec/
+extracted_spec.txt
+
+# Build
+**/bin/
+**/obj/
+**/publish/
+**/_build_portcheck/
+TestResults/
+coverage/
+coverage-results/
+*.coverage
+*.coveragexml
+
+# Node (tools)
+**/node_modules/
+
+# Secrets (never commit real values)
+**/appsettings.*.local.json
+*.pfx
+.env
+.env.*

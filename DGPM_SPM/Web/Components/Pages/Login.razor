@@ -1,0 +1,136 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout LoginLayout
+@using Microsoft.Extensions.Options
+@inject SpmApiClient ApiClient
+@inject SpmAuthenticationStateProvider AuthProvider
+@inject AuthTokenStore TokenStore
+@inject NavigationManager Navigation
+@inject IOptions<DGPM_SPM.Web.Models.AuthOptions> AuthOptionsAccessor
+
+<PageTitle>登入 - DGPM</PageTitle>
+
+<div class="login-card card shadow">
+    <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+            <h1 class="login-title">DGPM</h1>
+            <div class="login-subtitle">經銷商績效管理系統</div>
+        </div>
+
+        @if (_entryDisabled)
+        {
+            <div class="alert alert-warning py-2" role="alert">
+                本系統登入入口已停用，帳號主責為 PGM，請至 PGM 系統登入。
+            </div>
+        }
+        else
+        {
+            <EditForm Model="_form" OnValidSubmit="HandleLoginAsync" FormName="login">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label" for="login-userid">帳號</label>
+                    <InputText id="login-userid" class="form-control" @bind-Value="_form.UserId"
+                               autocomplete="username" placeholder="請輸入帳號" />
+                    <ValidationMessage For="() => _form.UserId" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="login-password">密碼</label>
+                    <InputText id="login-password" type="password" class="form-control" @bind-Value="_form.Password"
+                               autocomplete="current-password" placeholder="請輸入密碼" />
+                    <ValidationMessage For="() => _form.Password" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger py-2" role="alert">@_errorMessage</div>
+                }
+
+                <button type="submit" class="btn btn-primary w-100" disabled="@_submitting">
+                    @(_submitting ? "登入中…" : "登入")
+                </button>
+            </EditForm>
+        }
+    </div>
+</div>
+
+@code {
+    private sealed class LoginFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "請輸入帳號")]
+        public string UserId { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "請輸入密碼")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private readonly LoginFormModel _form = new();
+    private string? _errorMessage;
+    private bool _submitting;
+    private bool _entryDisabled;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // AllowPGMLoginEntry=false 時提前顯示停用訊息，不需等後端回應才知道。
+        _entryDisabled = !AuthOptionsAccessor.Value.AllowPGMLoginEntry;
+        if (_entryDisabled)
+            return;
+
+        // 已登入者直接進入首頁，避免重複登入。
+        var session = await TokenStore.GetAsync();
+        if (session is not null && !session.IsExpired)
+        {
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _submitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            // 避免同瀏覽器／circuit 殘留舊 session 干擾；真正登入成功後會再寫入。
+            await TokenStore.ClearAsync();
+
+            var result = await ApiClient.LoginAsync(new LoginRequest
+            {
+                UserId = _form.UserId.Trim(),
+                Password = _form.Password
+            });
+
+            if (!result.Succeeded || result.Data is null)
+            {
+                _errorMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
+                    ? "登入失敗，請稍後再試。"
+                    : result.ErrorMessage;
+                return;
+            }
+
+            await AuthProvider.SignInAsync(AuthSession.FromLogin(result.Data));
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private string SafeReturnUrl()
+    {
+        // 僅允許站內相對路徑，避免 open redirect。
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+            return "/";
+
+        var url = ReturnUrl.Trim();
+        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase) || url.StartsWith("//"))
+            return "/";
+
+        return url.StartsWith('/') ? url : "/" + url;
+    }
+}

@@ -1,0 +1,382 @@
+@page "/kpi/review"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>KPI 資料審核 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="經銷商KPI管理" Current="KPI 資料審核" />
+
+<div class="mb-3">
+    <h1 class="page-title">KPI 資料審核</h1>
+    <p class="page-desc mb-0">查詢 KPI 數據覆核狀態，執行覆核確認（鎖定）或解鎖退回（待修正）。</p>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-period">資料年月</label>
+                <input id="filter-period" class="form-control" maxlength="6"
+                       @bind="_filterPeriodYm" placeholder="yyyyMM" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label class="form-label" for="filter-keyword">關鍵字</label>
+                <input id="filter-keyword" class="form-control" maxlength="200"
+                       @bind="_filterKeyword" placeholder="經銷商或指標的代碼、名稱" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-status">覆核狀態</label>
+                <select id="filter-status" class="form-select" @bind="_filterReviewStatus">
+                    <option value="">全部</option>
+                    <option value="D">草稿</option>
+                    <option value="R">覆核完成</option>
+                    <option value="U">已解鎖</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_actionTarget is not null)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header">
+            @(_actionIsUnlock ? "解鎖退回" : "覆核確認")：
+            @_actionTarget.DealerCode @_actionTarget.DealerName / @_actionTarget.IndicatorName（@FormatPeriod(_actionTarget.PeriodYm)）
+        </div>
+        <div class="card-body">
+            @if (_actionIsUnlock)
+            {
+                <EditForm @key="_actionVersion" Model="_unlockModel" OnValidSubmit="ConfirmUnlockAsync" FormName="kpi-review-unlock">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="unlock-reason">解鎖原因（必填）</label>
+                            <InputTextArea id="unlock-reason" class="form-control" rows="2" maxlength="500"
+                                           @bind-Value="_unlockModel.Reason" />
+                            <ValidationMessage For="() => _unlockModel.Reason" />
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button type="submit" class="btn btn-danger" disabled="@_saving">
+                                @(_saving ? "處理中…" : "確認解鎖")
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="CancelAction">取消</button>
+                        </div>
+                    </div>
+                </EditForm>
+            }
+            else
+            {
+                <EditForm @key="_actionVersion" Model="_reviewModel" OnValidSubmit="ConfirmReviewAsync" FormName="kpi-review-confirm">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="review-memo">覆核備註（選填）</label>
+                            <InputTextArea id="review-memo" class="form-control" rows="2" maxlength="500"
+                                           @bind-Value="_reviewModel.Memo" />
+                            <ValidationMessage For="() => _reviewModel.Memo" />
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                @(_saving ? "處理中…" : "確認覆核")
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="CancelAction">取消</button>
+                        </div>
+                    </div>
+                </EditForm>
+            }
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>資料年月</th>
+                        <th>經銷商</th>
+                        <th>KPI 指標</th>
+                        <th class="text-end">數值</th>
+                        <th>單位</th>
+                        <th>覆核狀態</th>
+                        <th>最後覆核</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="8" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="8" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _page.Datas)
+                        {
+                            <tr>
+                                <td>@FormatPeriod(item.PeriodYm)</td>
+                                <td>
+                                    <span class="fw-semibold">@item.DealerCode</span>
+                                    <span class="d-block small text-secondary">@item.DealerName</span>
+                                </td>
+                                <td>
+                                    <span class="fw-semibold">@item.IndicatorCode</span>
+                                    <span class="d-block small text-secondary">@item.IndicatorName</span>
+                                </td>
+                                <td class="text-end">@FormatValue(item.KpiValue)</td>
+                                <td>@item.Unit</td>
+                                <td>
+                                    <span class="badge @ReviewStatusBadge(item.ReviewStatus)">
+                                        @FormatReviewStatus(item.ReviewStatus)
+                                    </span>
+                                </td>
+                                <td>@FormatReviewed(item)</td>
+                                <td class="text-end text-nowrap">
+                                    @if (item.ReviewStatus is "D" or "U")
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                disabled="@_saving" @onclick="() => StartReview(item)">覆核確認</button>
+                                    }
+                                    else if (item.ReviewStatus == "R")
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                disabled="@_saving" @onclick="() => StartUnlock(item)">解鎖退回</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="KPI 審核分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private KpiDataPage _page = new();
+    private ReviewKpiDataRequest _reviewModel = new();
+    private UnlockKpiDataRequest _unlockModel = new();
+    private KpiDataDto? _actionTarget;
+    private bool _actionIsUnlock;
+    private int _actionVersion;
+    private string? _filterPeriodYm;
+    private string? _filterKeyword;
+    private string? _filterReviewStatus;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetKpiReviewDataAsync(
+                _filterPeriodYm,
+                _filterKeyword,
+                _filterReviewStatus,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new KpiDataPage();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        var period = _filterPeriodYm?.Trim();
+        if (!string.IsNullOrEmpty(period)
+            && !DateTime.TryParseExact(period, "yyyyMM", null, System.Globalization.DateTimeStyles.None, out _))
+        {
+            _isError = true;
+            _message = "資料年月格式須為 yyyyMM，例如 202607。";
+            return;
+        }
+
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterPeriodYm = null;
+        _filterKeyword = null;
+        _filterReviewStatus = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void StartReview(KpiDataDto item)
+    {
+        _actionTarget = item;
+        _actionIsUnlock = false;
+        _reviewModel = new ReviewKpiDataRequest();
+        _actionVersion++;
+        ClearMessage();
+    }
+
+    private void StartUnlock(KpiDataDto item)
+    {
+        _actionTarget = item;
+        _actionIsUnlock = true;
+        _unlockModel = new UnlockKpiDataRequest();
+        _actionVersion++;
+        ClearMessage();
+    }
+
+    private void CancelAction()
+    {
+        _actionTarget = null;
+        ClearMessage();
+    }
+
+    private async Task ConfirmReviewAsync()
+    {
+        if (_actionTarget is null)
+            return;
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var result = await ApiClient.ReviewKpiDataAsync(_actionTarget.DataId, _reviewModel, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+
+            _message = "覆核完成，該筆數據已鎖定。";
+            _actionTarget = null;
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ConfirmUnlockAsync()
+    {
+        if (_actionTarget is null)
+            return;
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var result = await ApiClient.UnlockKpiDataAsync(_actionTarget.DataId, _unlockModel, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+
+            _message = "已解鎖退回，該筆數據待修正後須重新覆核。";
+            _actionTarget = null;
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _isError = true;
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/kpi/review", replace: true);
+        return true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatPeriod(string periodYm)
+        => periodYm.Length == 6 ? $"{periodYm[..4]}/{periodYm[4..]}" : periodYm;
+
+    private static string FormatValue(decimal? value)
+        => value?.ToString("#,##0.######") ?? "-";
+
+    private static string FormatReviewStatus(string reviewStatus)
+        => reviewStatus switch
+        {
+            "D" => "草稿",
+            "R" => "覆核完成",
+            "U" => "已解鎖",
+            _ => reviewStatus
+        };
+
+    private static string ReviewStatusBadge(string reviewStatus)
+        => reviewStatus switch
+        {
+            "R" => "text-bg-success",
+            "U" => "text-bg-warning",
+            _ => "text-bg-secondary"
+        };
+
+    private static string FormatReviewed(KpiDataDto item)
+        => item.ReviewDate.HasValue
+            ? $"{item.ReviewDate:yyyy/MM/dd HH:mm} {item.ReviewUser}".Trim()
+            : "-";
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

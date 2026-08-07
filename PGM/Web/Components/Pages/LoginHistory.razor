@@ -1,0 +1,213 @@
+@page "/query/login-history"
+@implements IDisposable
+@inject PgmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>登入歷程查詢 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="系統資料查詢" Current="登入歷程查詢" />
+
+<div class="mb-3">
+    <h1 class="page-title">登入歷程查詢</h1>
+    <p class="page-desc mb-0">查詢使用者登入 / 登出軌跡與來源 IP（僅供查詢）。</p>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert alert-danger py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label class="form-label" for="filter-keyword">使用者帳號</label>
+                <input id="filter-keyword" class="form-control" maxlength="50"
+                       @bind="_filterKeyword" placeholder="帳號關鍵字" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-date-from">登入日期（起）</label>
+                <input id="filter-date-from" type="date" class="form-control" @bind="_filterLoginDateFrom" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-date-to">登入日期（迄）</label>
+                <input id="filter-date-to" type="date" class="form-control" @bind="_filterLoginDateTo" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-status">登入狀態</label>
+                <select id="filter-status" class="form-select" @bind="_filterAuthStatus">
+                    <option value="">全部</option>
+                    <option value="I">登入中</option>
+                    <option value="O">已登出</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-3 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>使用者帳號</th>
+                        <th>登入時間</th>
+                        <th>登出時間</th>
+                        <th>登入狀態</th>
+                        <th>來源 IP</th>
+                        <th>登入類型</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="6" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="6" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _page.Datas)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@item.UserId</td>
+                                <td class="text-nowrap">@FormatTime(item.LoginTime)</td>
+                                <td class="text-nowrap">@(item.LogoutTime.HasValue ? FormatTime(item.LogoutTime.Value) : "-")</td>
+                                <td>
+                                    <span class="badge @(item.AuthStatus == "O" ? "text-bg-secondary" : "text-bg-success")">
+                                        @FormatAuthStatus(item.AuthStatus)
+                                    </span>
+                                </td>
+                                <td>@(string.IsNullOrWhiteSpace(item.Ip) ? "-" : item.Ip)</td>
+                                <td>@item.LoginType</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="登入歷程分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private PagedResult<AuthenticationLogDto> _page = new();
+    private string? _filterKeyword;
+    private DateTime? _filterLoginDateFrom;
+    private DateTime? _filterLoginDateTo;
+    private string? _filterAuthStatus;
+    private string? _message;
+    private bool _loading;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetLoginHistoryAsync(
+                _filterKeyword,
+                _filterLoginDateFrom,
+                _filterLoginDateTo,
+                _filterAuthStatus,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new PagedResult<AuthenticationLogDto>();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_filterLoginDateFrom.HasValue && _filterLoginDateTo.HasValue
+            && _filterLoginDateFrom.Value.Date > _filterLoginDateTo.Value.Date)
+        {
+            _message = "登入日期（起）不可晚於登入日期（迄）。";
+            return;
+        }
+
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterKeyword = null;
+        _filterLoginDateFrom = null;
+        _filterLoginDateTo = null;
+        _filterAuthStatus = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/query/login-history", replace: true);
+        return true;
+    }
+
+    private void ClearMessage() => _message = null;
+
+    private static string FormatTime(DateTime value)
+        => value.ToString("yyyy/MM/dd HH:mm:ss");
+
+    private static string FormatAuthStatus(string authStatus)
+        => authStatus switch
+        {
+            "I" => "登入中",
+            "O" => "已登出",
+            _ => authStatus
+        };
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

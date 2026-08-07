@@ -1,0 +1,109 @@
+.tableFooter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding: 0 24px 20px;
+    color: #536680;
+    font-weight: 700;
+}
+
+.pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pager button,
+.pager strong {
+    min-width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1px solid #d4e1f0;
+    display: inline-grid;
+    place-items: center;
+    background: #fff;
+    color: #24405f;
+    padding: 0 8px;
+    font: inherit;
+    font-weight: 700;
+}
+
+.pager button:hover:not(:disabled) {
+    background: #eef6ff;
+    border-color: #9fc2f2;
+}
+
+.pager button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.pager strong {
+    background: var(--color-primary, #0b63d1);
+    color: #fff;
+    border-color: var(--color-primary, #0b63d1);
+}
+
+.pageSizeForm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pageSizeForm label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.pageSizeForm .formSelect {
+    width: 78px;
+    min-height: 36px;
+    border: 1px solid #cdd9e8;
+    border-radius: 6px;
+    background: #fff;
+    color: #20324c;
+    padding: 4px 8px;
+    outline: none;
+}
+
+.pageSizeForm .formSelect:focus {
+    border-color: var(--color-primary, #0b63d1);
+    box-shadow: 0 0 0 3px rgba(11, 99, 209, 0.12);
+}
+
+.pageSizeForm .btn {
+    min-height: 36px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    padding: 0 16px;
+    font-weight: 900;
+}
+
+.pageSizeForm .btnOutline {
+    color: var(--color-primary, #0b63d1);
+    background: #fff;
+    border-color: #9fc2f2;
+}
+
+.pageSizeForm .btnOutline:hover:not(:disabled) {
+    background: #eef6ff;
+}
+
+.pageSizeForm .btnOutline:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+    .tableFooter {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}

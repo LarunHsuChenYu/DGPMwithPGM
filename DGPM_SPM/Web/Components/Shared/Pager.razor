@@ -1,0 +1,73 @@
+<div class="tableFooter">
+    <span>顯示第 @FromRow 至 @ToRow 筆，共 @TotalRows 筆</span>
+    <nav class="pager" aria-label="@AriaLabel">
+        <button type="button"
+                disabled="@(Loading || CurrentPage <= 1)"
+                @onclick="() => ChangePageAsync(1)"
+                title="第一頁">«</button>
+        <button type="button"
+                disabled="@(Loading || CurrentPage <= 1)"
+                @onclick="() => ChangePageAsync(CurrentPage - 1)"
+                title="上一頁">‹</button>
+        <strong>@CurrentPage / @DisplayTotalPages</strong>
+        <button type="button"
+                disabled="@(Loading || CurrentPage >= DisplayTotalPages)"
+                @onclick="() => ChangePageAsync(CurrentPage + 1)"
+                title="下一頁">›</button>
+        <button type="button"
+                disabled="@(Loading || CurrentPage >= DisplayTotalPages)"
+                @onclick="() => ChangePageAsync(DisplayTotalPages)"
+                title="最後一頁">»</button>
+    </nav>
+    <div class="pageSizeForm">
+        <label>
+            每頁
+            <select class="formSelect" value="@PageSize" @onchange="OnPageSizeSelectChanged" disabled="@Loading">
+                @foreach (var size in PageSizeOptions)
+                {
+                    <option value="@size">@(size == 0 ? "不分頁" : size.ToString())</option>
+                }
+            </select>
+            筆
+        </label>
+        <button class="btn btnOutline pageApply" type="button"
+                disabled="@Loading"
+                @onclick="ApplyPageSizeAsync">套用</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int TotalRows { get; set; }
+    [Parameter] public int FromRow { get; set; }
+    [Parameter] public int ToRow { get; set; }
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public EventCallback<int> PageSizeChanged { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "分頁";
+    [Parameter] public IReadOnlyList<int> PageSizeOptions { get; set; } = [5, 10, 20, 0];
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+    [Parameter] public EventCallback OnApplyPageSize { get; set; }
+
+    private int DisplayTotalPages => TotalPages <= 0 ? 1 : TotalPages;
+
+    private async Task ChangePageAsync(int page)
+    {
+        if (page < 1 || page > DisplayTotalPages || page == CurrentPage)
+            return;
+
+        await OnPageChanged.InvokeAsync(page);
+    }
+
+    private async Task OnPageSizeSelectChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var size))
+            return;
+
+        if (PageSizeChanged.HasDelegate)
+            await PageSizeChanged.InvokeAsync(size);
+    }
+
+    private Task ApplyPageSizeAsync() => OnApplyPageSize.InvokeAsync();
+}

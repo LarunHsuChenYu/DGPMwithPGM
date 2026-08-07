@@ -1,0 +1,82 @@
+/* 對齊 RoleFunctionSet SRS：角色標籤列 + 青色表頭、表頭【確認】 */
+
+.role-filter {
+    border: 1px solid #222;
+    background: #fff;
+    padding: 0.65rem 0.75rem;
+}
+
+.role-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.5rem;
+}
+
+.role-filter-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.5rem;
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    background: #cbb8e8;
+    border: 1px solid #222;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.role-filter-field {
+    flex: 1 1 14rem;
+    max-width: 22rem;
+}
+
+.role-filter-field .form-select {
+    border-color: #222;
+    border-radius: 0;
+}
+
+.role-fun-table thead th {
+    background: #7fd6e8;
+    font-weight: 600;
+    border-color: #222;
+    vertical-align: middle;
+}
+
+.role-fun-table td,
+.role-fun-table th {
+    border-color: #222;
+    vertical-align: middle;
+}
+
+.role-fun-table .col-check {
+    width: 5.5rem;
+    text-align: center;
+}
+
+.role-fun-table .empty-cell {
+    text-align: center;
+    color: #666;
+    padding: 1.25rem;
+}
+
+.role-confirm-btn {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border: 1px solid #222;
+    background: #fff;
+    color: #1a1a1a;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    border-radius: 0.1rem;
+    cursor: pointer;
+}
+
+.role-confirm-btn:hover:not(:disabled) {
+    background: #f3f3f3;
+}
+
+.role-confirm-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}

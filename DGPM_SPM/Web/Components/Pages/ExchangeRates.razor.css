@@ -1,0 +1,48 @@
+.page-title {
+    margin-bottom: 0.25rem;
+    color: #1f2937;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.page-desc {
+    color: #6b7280;
+}
+
+.card {
+    border-color: #e5e7eb;
+}
+
+.editor-card {
+    border-left: 0.25rem solid #0d6efd;
+}
+
+.editor-card .card-header {
+    background-color: #f8fafc;
+    font-weight: 600;
+}
+
+thead th {
+    border-bottom-width: 1px;
+    background-color: #f8fafc;
+    color: #475569;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.empty-cell {
+    padding: 2.5rem 1rem;
+    color: #6b7280;
+    text-align: center;
+}
+
+.memo-cell {
+    min-width: 10rem;
+    max-width: 22rem;
+    overflow-wrap: anywhere;
+}
+
+.validation-message {
+    color: #dc3545;
+    font-size: 0.8rem;
+}

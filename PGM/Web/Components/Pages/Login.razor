@@ -1,0 +1,122 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout LoginLayout
+@inject PgmApiClient ApiClient
+@inject SpmAuthenticationStateProvider AuthProvider
+@inject AuthTokenStore TokenStore
+@inject NavigationManager Navigation
+
+<PageTitle>登入 - PGM</PageTitle>
+
+<div class="login-card">
+    <div class="login-card-body">
+        <div class="login-brand">PAN GERMAN</div>
+        <h1 class="login-title">PGM 系統登入</h1>
+
+        <EditForm Model="_form" OnValidSubmit="HandleLoginAsync" FormName="login">
+            <DataAnnotationsValidator />
+
+            <div class="login-field">
+                <label class="login-label" for="login-userid">帳號</label>
+                <InputText id="login-userid" class="login-input" @bind-Value="_form.UserId"
+                           autocomplete="username" />
+                <ValidationMessage For="() => _form.UserId" />
+            </div>
+
+            <div class="login-field">
+                <label class="login-label" for="login-password">密碼</label>
+                <InputText id="login-password" type="password" class="login-input" @bind-Value="_form.Password"
+                           autocomplete="current-password" />
+                <ValidationMessage For="() => _form.Password" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="login-error" role="alert">@_errorMessage</div>
+            }
+
+            <button type="submit" class="login-submit" disabled="@_submitting">
+                @(_submitting ? "登入中…" : "登入")
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private sealed class LoginFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "請輸入帳號")]
+        public string UserId { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "請輸入密碼")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private readonly LoginFormModel _form = new();
+    private string? _errorMessage;
+    private bool _submitting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 已登入者直接進入首頁，避免重複登入。
+        var session = await TokenStore.GetAsync();
+        if (session is not null && !session.IsExpired)
+        {
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _submitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await ApiClient.LoginAsync(new LoginRequest
+            {
+                UserId = _form.UserId.Trim(),
+                Password = _form.Password
+            });
+
+            if (!result.Succeeded || result.Data is null)
+            {
+                _errorMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
+                    ? "登入失敗，請稍後再試。"
+                    : result.ErrorMessage;
+                return;
+            }
+
+            await AuthProvider.SignInAsync(AuthSession.FromLogin(result.Data));
+
+            // 強制改密：導向重設密碼頁（保留登入 session）。
+            if (result.Data.PasswordExpired)
+            {
+                Navigation.NavigateTo("/account/change-password", replace: true);
+                return;
+            }
+
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private string SafeReturnUrl()
+    {
+        // 僅允許站內相對路徑，避免 open redirect。
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+            return "/";
+
+        var url = ReturnUrl.Trim();
+        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase) || url.StartsWith("//"))
+            return "/";
+
+        return url.StartsWith('/') ? url : "/" + url;
+    }
+}

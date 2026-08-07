@@ -1,0 +1,35 @@
+﻿  甇??斗閬???撠?...
+  撌脤???d:\07-DGPM\DGPM_SPM\Core\DGPM_SPM.Core.csproj (1.58 蝘?????
+  撌脤???d:\07-DGPM\DGPM_SPM\tests\Core.Tests\DGPM_SPM.Core.Tests.csproj (1.6 蝘?????
+  DGPM_SPM.Core -> d:\07-DGPM\DGPM_SPM\tests\_test_out_functionlist\DGPM_SPM.Core.dll
+  DGPM_SPM.Core.Tests -> d:\07-DGPM\DGPM_SPM\tests\_test_out_functionlist\DGPM_SPM.Core.Tests.dll
+d:\07-DGPM\DGPM_SPM\tests\_test_out_functionlist\DGPM_SPM.Core.Tests.dll ?葫閰血???(.NETCoreApp,Version=v10.0)
+蝮賢??1 ?葫閰行?獢????芋撘蝚艾?
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.21]   Discovering: DGPM_SPM.Core.Tests
+[xUnit.net 00:00:00.34]   Discovered:  DGPM_SPM.Core.Tests
+[xUnit.net 00:00:00.35]   Starting:    DGPM_SPM.Core.Tests
+  撌脤? DGPM_SPM.Core.Tests.Services.RoleServiceTests.SavePermissionsAsync_WithUnknownFunction_ReturnsValidationError [326 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.PermissionServiceTests.CheckAsync_WithAllowedFunction_ReturnsTrue [336 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.PermissionServiceTests.CheckAsync_WithDeniedFunction_ReturnsFalse [1 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.RoleServiceTests.SavePermissionsAsync_WithValidFunctions_NormalizesAndCommits [10 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.CreateAsync_WithDuplicateFunId_ReturnsDuplicate [342 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.UpdateAsync_WhenParentIsDescendant_ReturnsValidationError [7 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.CreateAsync_WhenActionTypeM_ClearsParentId [6 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.CanDeleteAsync_WhenClear_ReturnsSuccess [4 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.UpdateAsync_WhenFunIdChanged_ReturnsValidationError [1 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.RoleServiceTests.GetPermissionsAsync_MarksGrantedFunctions [21 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.GetPagedAsync_ReturnsMappedPage [6 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.SoftDeleteAsync_WhenValid_CommitsChange [5 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.SoftDeleteAsync_WhenReferencedByRole_ReturnsValidationError [1 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.GetPagedAsync_WithInvalidActionType_ReturnsInvalidParameter [1 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.CreateAsync_WhenParentIdIsZero_NormalizesToNull_AndRejectsNonModule [4 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.CreateAsync_WithValidRequest_CommitsTransaction [3 ms]
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.SoftDeleteAsync_WhenHasChildren_ReturnsValidationError [1 ms]
+[xUnit.net 00:00:00.85]   Finished:    DGPM_SPM.Core.Tests
+  撌脤? DGPM_SPM.Core.Tests.Services.FunctionServiceTests.SoftDeleteAsync_WhenRepositoryThrows_RollsBack [28 ms]
+
+皜祈岫??????
+皜祈岫?貊蜇閮? 18
+     ??: 18
+ ??蝮質?: 1.9389 蝘?

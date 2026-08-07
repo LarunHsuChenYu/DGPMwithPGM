@@ -1,0 +1,371 @@
+@page "/parameters/param-set"
+@implements IDisposable
+@inject PgmApiClient ApiClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>系統代碼維護 - PGM</PageTitle>
+
+<PageBreadcrumb Module="系統管理" Current="系統代碼維護" />
+
+<h1 class="page-title mb-3">系統代碼維護</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+@* 對齊 ParamSet SRS 進入畫面：代碼類別下拉 + 查詢 *@
+<section class="param-filter mb-3">
+    <div class="param-filter-row">
+        <label class="param-filter-label" for="param-category">代碼類別</label>
+        <div class="param-filter-field">
+            <InputSelect id="param-category" class="form-select" @bind-Value="_selectedSetItem"
+                         disabled="@(_loading || _saving)">
+                <option value="">請選擇</option>
+                @foreach (var category in _categories)
+                {
+                    <option value="@category.SetItem">@category.SetItemName</option>
+                }
+            </InputSelect>
+        </div>
+        <button type="button" class="btn btn-outline-dark param-filter-query"
+                disabled="@(_loading || _saving)" @onclick="SearchAsync">
+            查詢
+        </button>
+    </div>
+</section>
+
+<button type="button" class="btn btn-outline-dark mb-3" @onclick="StartCreateAsync"
+        disabled="@(_loading || _saving || string.IsNullOrWhiteSpace(_queriedSetItem) || _showEditor)">
+    新增代碼
+</button>
+
+@if (_showEditor)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header">@(_isCreate ? "新增代碼" : "編輯代碼")</div>
+        <div class="card-body">
+            <EditForm @key="_editVersion" Model="_editModel" OnValidSubmit="SaveAsync" FormName="param-set-edit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-set-item">代碼類別</label>
+                        <InputText id="edit-set-item" class="form-control" @bind-Value="_editModel.SetItem" disabled="true" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-set-item-name">代碼類別名稱</label>
+                        <InputText id="edit-set-item-name" class="form-control" @bind-Value="_editModel.SetItemName" disabled="true" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-set-id">代碼</label>
+                        <InputText id="edit-set-id" class="form-control" maxlength="20"
+                                   disabled="@(!_isCreate)" @bind-Value="_editModel.SetId" />
+                        <ValidationMessage For="() => _editModel.SetId" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-set-value">代碼名稱</label>
+                        <InputText id="edit-set-value" class="form-control" maxlength="50"
+                                   @bind-Value="_editModel.SetValue" />
+                        <ValidationMessage For="() => _editModel.SetValue" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-sort-order">排序</label>
+                        <InputNumber id="edit-sort-order" class="form-control"
+                                     @bind-Value="_editModel.SortOrder" />
+                        <ValidationMessage For="() => _editModel.SortOrder" />
+                    </div>
+                    <div class="col-12 d-flex gap-2 justify-content-end">
+                        <button type="submit" class="btn btn-outline-dark" disabled="@_saving">
+                            @(_saving ? "儲存中…" : "儲存")
+                        </button>
+                        <button type="button" class="btn btn-outline-dark" disabled="@_saving" @onclick="CancelEdit">取消</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 param-set-table">
+                <thead>
+                    <tr>
+                        <th>代碼類別ID</th>
+                        <th>代碼類別</th>
+                        <th>代碼</th>
+                        <th>代碼名稱</th>
+                        <th>排序</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="6" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (string.IsNullOrWhiteSpace(_queriedSetItem))
+                    {
+                        <tr><td colspan="6" class="empty-cell">請選擇代碼類別後按「查詢」</td></tr>
+                    }
+                    else if (_rows.Count == 0)
+                    {
+                        <tr><td colspan="6" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in _rows)
+                        {
+                            <tr>
+                                <td>@row.SetItem</td>
+                                <td>@row.SetItemName</td>
+                                <td>@row.SetId</td>
+                                <td>@row.SetValue</td>
+                                <td>@row.SortOrder</td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-dark me-1"
+                                            @onclick="() => StartEdit(row)" disabled="@_saving">編輯</button>
+                                    <button type="button" class="btn btn-sm btn-outline-dark"
+                                            @onclick="() => DeleteAsync(row)" disabled="@_saving">刪除</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private IReadOnlyList<ParameterCategoryDto> _categories = [];
+    private IReadOnlyList<ParameterDto> _rows = [];
+    private ParameterEditModel _editModel = new();
+    /// <summary>下拉目前選擇（尚未查詢也可能變更）。</summary>
+    private string _selectedSetItem = string.Empty;
+    /// <summary>已查詢並顯示於 Grid 的類別。</summary>
+    private string _queriedSetItem = string.Empty;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+    private bool _isCreate;
+    private int _editVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetParameterCategoriesAsync(_disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+            _categories = result.Data ?? [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        CancelEdit(clearMessage: false);
+
+        if (string.IsNullOrWhiteSpace(_selectedSetItem))
+        {
+            _queriedSetItem = string.Empty;
+            _rows = [];
+            ShowError("請選擇代碼類別。");
+            return;
+        }
+
+        _queriedSetItem = _selectedSetItem;
+        await LoadRowsAsync();
+    }
+
+    private async Task LoadRowsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_queriedSetItem))
+        {
+            _rows = [];
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetParametersByCategoryAsync(_queriedSetItem, _disposeCts.Token);
+            if (!HandleFailure(result))
+                _rows = result.Data ?? [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task StartCreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_queriedSetItem))
+        {
+            ShowError("請先查詢代碼類別。");
+            return;
+        }
+
+        ClearMessage();
+        var category = _categories.FirstOrDefault(c => c.SetItem == _queriedSetItem);
+        var sortResult = await ApiClient.GetParameterNextSortOrderAsync(_queriedSetItem, _disposeCts.Token);
+        if (HandleFailure(sortResult))
+            return;
+
+        _isCreate = true;
+        _editModel = new ParameterEditModel
+        {
+            SetItem = _queriedSetItem,
+            SetItemName = category?.SetItemName ?? string.Empty,
+            SortOrder = sortResult.Data
+        };
+        _editVersion++;
+        _showEditor = true;
+    }
+
+    private void StartEdit(ParameterDto row)
+    {
+        ClearMessage();
+        _isCreate = false;
+        _editModel = new ParameterEditModel
+        {
+            SetItem = row.SetItem,
+            SetItemName = row.SetItemName,
+            SetId = row.SetId,
+            SetValue = row.SetValue,
+            SortOrder = row.SortOrder
+        };
+        _editVersion++;
+        _showEditor = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            ApiResult<ParameterDto> result;
+            if (_isCreate)
+            {
+                result = await ApiClient.CreateParameterAsync(new CreateParameterRequest
+                {
+                    SetItem = _editModel.SetItem,
+                    SetId = _editModel.SetId,
+                    SetValue = _editModel.SetValue,
+                    SortOrder = _editModel.SortOrder
+                }, _disposeCts.Token);
+            }
+            else
+            {
+                result = await ApiClient.UpdateParameterAsync(
+                    _editModel.SetItem,
+                    _editModel.SetId,
+                    new UpdateParameterRequest
+                    {
+                        SetValue = _editModel.SetValue,
+                        SortOrder = _editModel.SortOrder
+                    },
+                    _disposeCts.Token);
+            }
+
+            if (HandleFailure(result))
+                return;
+
+            _message = _isCreate ? "代碼已新增。" : "代碼已更新。";
+            CancelEdit(clearMessage: false);
+            await LoadRowsAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(ParameterDto row)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "請確認要刪除此筆資料嗎");
+        if (!confirmed)
+            return;
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var result = await ApiClient.DeleteParameterAsync(row.SetItem, row.SetId, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+
+            _message = "代碼已刪除。";
+            if (!_isCreate
+                && string.Equals(_editModel.SetItem, row.SetItem, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(_editModel.SetId, row.SetId, StringComparison.OrdinalIgnoreCase))
+            {
+                CancelEdit(clearMessage: false);
+            }
+
+            await LoadRowsAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void CancelEdit() => CancelEdit(clearMessage: true);
+
+    private void CancelEdit(bool clearMessage)
+    {
+        _showEditor = false;
+        _isCreate = false;
+        _editModel = new ParameterEditModel();
+        if (clearMessage)
+            ClearMessage();
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+        ShowError(result.ErrorMessage);
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/parameters/param-set", replace: true);
+        return true;
+    }
+
+    private void ShowError(string? message)
+    {
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗，請稍後再試。" : message;
+        _isError = true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

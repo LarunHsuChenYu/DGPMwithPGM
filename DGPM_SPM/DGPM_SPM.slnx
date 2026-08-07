@@ -1,0 +1,13 @@
+<Solution>
+  <Project Path="Api/DGPM_SPM.Api.csproj" />
+  <Project Path="Core/DGPM_SPM.Core.csproj" />
+  <Project Path="Infrastructure/DGPM_SPM.Infrastructure.csproj" />
+  <Project Path="Web/DGPM_SPM.Web.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Core.Tests/DGPM_SPM.Core.Tests.csproj" />
+    <Project Path="tests/Api.Tests/DGPM_SPM.Api.Tests.csproj" />
+    <Project Path="tests/Architecture.Tests/DGPM_SPM.Architecture.Tests.csproj" />
+    <Project Path="tests/Web.Tests/DGPM_SPM.Web.Tests.csproj" />
+    <Project Path="tests/Integration.Tests/DGPM_SPM.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

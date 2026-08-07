@@ -1,0 +1,36 @@
+.cursor/
+.vs/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+
+# Office lock / temp files
+~$*
+
+# Logs
+*.log
+extracted_spec/
+extracted_spec.txt
+test-out.txt
+tests/_test_functionlist_result.txt
+
+# Build outputs
+bin/
+obj/
+publish/
+
+# Common .NET test and coverage outputs
+TestResults/
+coverage/
+coverage-results/
+*.coverage
+*.coveragexml
+
+# IDE and tooling caches
+_ReSharper*/
+*.DotSettings.user
+
+tools/screenshot/node_modules/
+

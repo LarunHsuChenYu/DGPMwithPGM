@@ -1,0 +1,25 @@
+.cursor/
+.vs/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+
+# Logs
+*.log
+
+# Build outputs
+bin/
+obj/
+
+# Common .NET test and coverage outputs
+TestResults/
+coverage/
+coverage-results/
+*.coverage
+*.coveragexml
+
+# IDE and tooling caches
+_ReSharper*/
+*.DotSettings.user

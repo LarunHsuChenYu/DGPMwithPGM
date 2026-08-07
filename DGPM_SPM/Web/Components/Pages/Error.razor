@@ -1,0 +1,26 @@
+﻿@page "/Error"
+@attribute [AllowAnonymous]
+@using System.Diagnostics
+
+<PageTitle>系統錯誤 - DGPM SPM</PageTitle>
+
+<h1 class="text-danger">系統發生錯誤</h1>
+<p>處理您的要求時發生未預期的錯誤，請稍後再試；若問題持續發生，請聯絡系統管理員。</p>
+
+@if (ShowRequestId)
+{
+    <p>
+        <strong>請求編號：</strong> <code>@RequestId</code>
+    </p>
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

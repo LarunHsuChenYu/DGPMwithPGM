@@ -1,0 +1,58 @@
+﻿{
+  "source_file": "BMWv20260720.xlsx",
+  "conversion_engine": "OpenXml",
+  "converted_date": "2026-07-30T16:20:24",
+  "cleanup": {
+    "actions_count": 0,
+    "actions": []
+  },
+  "openxml_images": null,
+  "openxml_sheets": {
+    "count": 12,
+    "sheet_names": [
+      "LIST",
+      "MAP_ROLE_FUNCTION",
+      "SET_FUNCTION",
+      "CHANGE_PASSWORD_HISTORY",
+      "EMP_USER",
+      "DIM_ROLE",
+      "MAP_USER_ROLE",
+      "DIM_RIGHT",
+      "SET_PARAMITEM",
+      "SET_PARAM",
+      "EMP_ORG",
+      "MAP_ROLE_RUNCTION"
+    ],
+    "conversion_log": [
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ALIST (1/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1AMAP_ROLE_FUNCTION (2/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ASET_FUNCTION (3/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ACHANGE_PASSWORD_HISTORY (4/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1AEMP_USER (5/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ADIM_ROLE (6/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1AMAP_USER_ROLE (7/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ADIM_RIGHT (8/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ASET_PARAMITEM (9/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ASET_PARAM (10/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1AEMP_ORG (11/12)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1AMAP_ROLE_RUNCTION (12/12)"
+    ]
+  },
+  "pdf_enhancement": null,
+  "enhancements": {
+    "actions_count": 2,
+    "actions": [
+      "\u63D2\u5165 [\u8868\u683C\u5F85\u4FEE] \u6A19\u8A18\uFF08\u7A7A\u5132\u5B58\u683C 64%\uFF09",
+      "\u63D2\u5165 [\u8868\u683C\u5F85\u4FEE] \u6A19\u8A18\uFF08\u7A7A\u5132\u5B58\u683C 56%\uFF09"
+    ]
+  },
+  "gaps": [
+    {
+      "Type": "broken_table",
+      "Location": "document",
+      "Field": null,
+      "Description": "\u8868\u683C\u7A7A\u5132\u5B58\u683C\u6BD4\u4F8B 64%\uFF0815 \u5217\uFF09",
+      "Severity": "moderate"
+    }
+  ]
+}

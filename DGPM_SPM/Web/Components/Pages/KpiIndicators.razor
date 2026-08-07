@@ -1,0 +1,393 @@
+@page "/kpi/indicators"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>KPI 指標維護 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="經銷商KPI管理" Current="KPI 指標維護" />
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+        <h1 class="page-title">KPI 指標維護</h1>
+        <p class="page-desc mb-0">查詢及維護經銷商 KPI 指標定義，並控制指標啟用狀態。</p>
+    </div>
+    <button type="button" class="btn btn-primary" @onclick="StartCreate">新增指標</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label class="form-label" for="filter-keyword">關鍵字</label>
+                <input id="filter-keyword" class="form-control" maxlength="200"
+                       @bind="_filterKeyword" placeholder="指標代碼或名稱" />
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-data-type">資料型態</label>
+                <select id="filter-data-type" class="form-select" @bind="_filterDataType">
+                    <option value="">全部</option>
+                    @foreach (var (value, text) in DataTypeOptions)
+                    {
+                        <option value="@value">@text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label" for="filter-status">狀態</label>
+                <select id="filter-status" class="form-select" @bind="_filterStatus">
+                    <option value="">全部</option>
+                    <option value="A">啟用</option>
+                    <option value="I">停用</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="SearchAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetSearchAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_showEditor)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header">@(_editingIndicatorId.HasValue ? "編輯指標" : "新增指標")</div>
+        <div class="card-body">
+            <EditForm @key="_editVersion" Model="_editModel" OnValidSubmit="SaveAsync" FormName="kpi-indicator-edit">
+                <DataAnnotationsValidator />
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="edit-code">指標代碼</label>
+                        <InputText id="edit-code" class="form-control text-uppercase" maxlength="30"
+                                   @bind-Value="_editModel.IndicatorCode" />
+                        <ValidationMessage For="() => _editModel.IndicatorCode" />
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <label class="form-label" for="edit-name">指標名稱</label>
+                        <InputText id="edit-name" class="form-control" maxlength="200"
+                                   @bind-Value="_editModel.IndicatorName" />
+                        <ValidationMessage For="() => _editModel.IndicatorName" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="edit-data-type">資料型態</label>
+                        <InputSelect id="edit-data-type" class="form-select" @bind-Value="_editModel.DataType">
+                            @foreach (var (value, text) in DataTypeOptions)
+                            {
+                                <option value="@value">@text</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _editModel.DataType" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="edit-unit">單位</label>
+                        <InputText id="edit-unit" class="form-control" maxlength="20"
+                                   @bind-Value="_editModel.Unit" placeholder="例如 台、%" />
+                        <ValidationMessage For="() => _editModel.Unit" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="edit-decimals">小數位數</label>
+                        <InputNumber id="edit-decimals" class="form-control" min="0" max="6"
+                                     @bind-Value="_editModel.DecimalPlaces" />
+                        <ValidationMessage For="() => _editModel.DecimalPlaces" />
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="edit-sort">排序</label>
+                        <InputNumber id="edit-sort" class="form-control" @bind-Value="_editModel.SortOrder" />
+                        <ValidationMessage For="() => _editModel.SortOrder" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="edit-memo">備註</label>
+                        <InputTextArea id="edit-memo" class="form-control" rows="2" maxlength="500"
+                                       @bind-Value="_editModel.Memo" />
+                        <ValidationMessage For="() => _editModel.Memo" />
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" disabled="@_saving">
+                            @(_saving ? "儲存中…" : "儲存")
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="CancelEdit">取消</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>指標代碼</th>
+                        <th>指標名稱</th>
+                        <th>資料型態</th>
+                        <th>單位</th>
+                        <th class="text-end">小數位數</th>
+                        <th class="text-end">排序</th>
+                        <th>狀態</th>
+                        <th>最後異動</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="9" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="9" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _page.Datas)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@item.IndicatorCode</td>
+                                <td>@item.IndicatorName</td>
+                                <td>@FormatDataType(item.DataType)</td>
+                                <td>@item.Unit</td>
+                                <td class="text-end">@item.DecimalPlaces</td>
+                                <td class="text-end">@item.SortOrder</td>
+                                <td>
+                                    <span class="badge @(item.Status == "A" ? "text-bg-success" : "text-bg-secondary")">
+                                        @(item.Status == "A" ? "啟用" : "停用")
+                                    </span>
+                                </td>
+                                <td>@FormatModified(item)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                            disabled="@_saving" @onclick="() => StartEdit(item)">編輯</button>
+                                    <button type="button"
+                                            class="btn btn-sm @(item.Status == "A" ? "btn-outline-danger" : "btn-outline-success")"
+                                            disabled="@_saving"
+                                            @onclick="() => ToggleStatusAsync(item)">
+                                        @(item.Status == "A" ? "停用" : "啟用")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="KPI 指標分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private static readonly (string Value, string Text)[] DataTypeOptions =
+    [
+        ("N", "數值"),
+        ("P", "百分比"),
+        ("A", "金額")
+    ];
+
+    private readonly CancellationTokenSource _disposeCts = new();
+    private KpiIndicatorPage _page = new();
+    private SaveKpiIndicatorRequest _editModel = new();
+    private int? _editingIndicatorId;
+    private int _editVersion;
+    private string? _filterKeyword;
+    private string? _filterDataType;
+    private string? _filterStatus;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+    private int _pageSize = 10;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override Task OnInitializedAsync() => LoadPageAsync(1);
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetKpiIndicatorsAsync(
+                _filterKeyword,
+                _filterDataType,
+                _filterStatus,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+
+            if (!HandleFailure(result))
+                _page = result.Data ?? new KpiIndicatorPage();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _filterKeyword = null;
+        _filterDataType = null;
+        _filterStatus = null;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void StartCreate()
+    {
+        _editingIndicatorId = null;
+        _editModel = new SaveKpiIndicatorRequest();
+        _editVersion++;
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void StartEdit(KpiIndicatorDto item)
+    {
+        _editingIndicatorId = item.IndicatorId;
+        _editModel = new SaveKpiIndicatorRequest
+        {
+            IndicatorCode = item.IndicatorCode,
+            IndicatorName = item.IndicatorName,
+            Unit = item.Unit,
+            DataType = item.DataType,
+            DecimalPlaces = item.DecimalPlaces,
+            SortOrder = item.SortOrder,
+            Memo = item.Memo
+        };
+        _editVersion++;
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void CancelEdit()
+    {
+        _showEditor = false;
+        _editingIndicatorId = null;
+        ClearMessage();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            ApiResult<KpiIndicatorDto> result = _editingIndicatorId.HasValue
+                ? await ApiClient.UpdateKpiIndicatorAsync(_editingIndicatorId.Value, _editModel, _disposeCts.Token)
+                : await ApiClient.CreateKpiIndicatorAsync(_editModel, _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            _message = _editingIndicatorId.HasValue ? "指標已更新。" : "指標已新增。";
+            _showEditor = false;
+            _editingIndicatorId = null;
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(KpiIndicatorDto item)
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var newStatus = item.Status == "A" ? "I" : "A";
+            var result = await ApiClient.SetKpiIndicatorStatusAsync(
+                item.IndicatorId,
+                newStatus,
+                _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            _message = newStatus == "A" ? "指標已啟用。" : "指標已停用。";
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _isError = true;
+        _message = result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/kpi/indicators", replace: true);
+        return true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatDataType(string dataType)
+        => dataType switch
+        {
+            "N" => "數值",
+            "P" => "百分比",
+            "A" => "金額",
+            _ => dataType
+        };
+
+    private static string FormatModified(KpiIndicatorDto item)
+    {
+        var date = item.MdfDate ?? item.CrtDate;
+        var user = item.MdfUser ?? item.CrtUser;
+        return date.HasValue ? $"{date:yyyy/MM/dd HH:mm} {user}".Trim() : user ?? string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

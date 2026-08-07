@@ -1,0 +1,19 @@
+.login-card {
+    width: 100%;
+    max-width: 420px;
+    border: none;
+    border-radius: 0.75rem;
+}
+
+.login-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+}
+
+.login-subtitle {
+    color: #6b7280;
+    font-size: 0.95rem;
+}

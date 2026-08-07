@@ -1,0 +1,345 @@
+@page "/system/users"
+@implements IDisposable
+@inject PgmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>使用者帳號維護 - PGM</PageTitle>
+
+<PageBreadcrumb Module="系統管理" Current="使用者帳號維護" />
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <h1 class="page-title mb-0">使用者帳號維護</h1>
+    <button type="button" class="btn btn-primary" @onclick="StartCreate" disabled="@_loading">新增</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+@if (_showEditor)
+{
+    <section class="card editor-card mb-3">
+        <div class="card-header">@(_editingUserId is null ? "新增使用者" : "編輯使用者")</div>
+        <div class="card-body">
+            <EditForm @key="_editVersion" Model="_editModel" OnValidSubmit="SaveAsync" FormName="user-account-edit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-user-id">使用者帳號</label>
+                        <InputText id="edit-user-id" class="form-control" maxlength="10"
+                                   disabled="@(_editingUserId is not null)" @bind-Value="_editModel.UserId" />
+                        <ValidationMessage For="() => _editModel.UserId" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-user-name">姓名</label>
+                        <InputText id="edit-user-name" class="form-control" maxlength="100"
+                                   @bind-Value="_editModel.UserName" />
+                        <ValidationMessage For="() => _editModel.UserName" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-email">Email</label>
+                        <InputText id="edit-email" class="form-control" maxlength="200" @bind-Value="_editModel.Email" />
+                        <ValidationMessage For="() => _editModel.Email" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-telephone">電話</label>
+                        <InputText id="edit-telephone" class="form-control" maxlength="50" @bind-Value="_editModel.Telephone" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="edit-role">角色</label>
+                        <InputSelect id="edit-role" class="form-select" @bind-Value="_editModel.SelectedRoleId">
+                            <option value="">請選擇角色</option>
+                            @foreach (var role in _roleOptions)
+                            {
+                                <option value="@role.RoleId">@role.RoleName</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-12 d-flex gap-2 justify-content-end">
+                        <button type="submit" class="btn btn-outline-dark" disabled="@_saving">
+                            @(_saving ? "儲存中…" : "儲存")
+                        </button>
+                        <button type="button" class="btn btn-outline-dark" disabled="@_saving" @onclick="CancelEdit">取消</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 user-account-table">
+                <thead>
+                    <tr>
+                        <th>使用者帳號</th>
+                        <th>姓名</th>
+                        <th>Email</th>
+                        <th>電話</th>
+                        <th>角色</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="6" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="6" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var user in _page.Datas)
+                        {
+                            var isActive = !user.DelFlg.GetValueOrDefault();
+                            <tr class="@(isActive ? null : "table-secondary")">
+                                <td>@user.UserId</td>
+                                <td>@user.UserName</td>
+                                <td>@(user.Email ?? "—")</td>
+                                <td>@(user.Telephone ?? "—")</td>
+                                <td>@FormatRoles(user.Roles)</td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-dark me-1"
+                                            @onclick="() => StartEditAsync(user.UserId)" disabled="@_saving">編輯</button>
+                                    @if (isActive)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-dark"
+                                                @onclick="() => DeleteAsync(user)" disabled="@_saving">刪除</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="使用者帳號分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    /// <summary>設計稿表單無密碼欄；新增一律預設密碼 0000，首次登入強制改密。</summary>
+    private const string DefaultInitialPassword = "0000";
+
+    private readonly CancellationTokenSource _disposeCts = new();
+    private PagedResult<UserAccountDto> _page = new();
+    private IReadOnlyList<RoleOptionDto> _roleOptions = [];
+    private UserAccountEditModel _editModel = new();
+    private string? _editingUserId;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+    private int _pageSize = 10;
+    private int _editVersion;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoleOptionsAsync();
+        await LoadPageAsync(1);
+    }
+
+    private async Task LoadRoleOptionsAsync()
+    {
+        var result = await ApiClient.GetUserRoleOptionsAsync(_disposeCts.Token);
+        if (HandleFailure(result))
+            return;
+        _roleOptions = result.Data ?? [];
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetUserAccountsAsync(
+                keyword: null,
+                isActive: true,
+                roleId: null,
+                page,
+                _pageSize,
+                _disposeCts.Token);
+            if (!HandleFailure(result))
+                _page = result.Data ?? new PagedResult<UserAccountDto>();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void StartCreate()
+    {
+        _editingUserId = null;
+        _editModel = new UserAccountEditModel();
+        _editVersion++;
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private async Task StartEditAsync(string userId)
+    {
+        ClearMessage();
+        var result = await ApiClient.GetUserAccountAsync(userId, _disposeCts.Token);
+        if (HandleFailure(result) || result.Data is null)
+            return;
+
+        var user = result.Data;
+        _editingUserId = user.UserId;
+        _editModel = new UserAccountEditModel
+        {
+            UserId = user.UserId,
+            UserName = user.UserName,
+            Email = user.Email,
+            Telephone = user.Telephone,
+            SelectedRoleId = user.Roles.Select(role => role.RoleId).FirstOrDefault() ?? string.Empty
+        };
+        _editVersion++;
+        _showEditor = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editModel.SelectedRoleId))
+        {
+            ShowError("請選擇角色。");
+            return;
+        }
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var roleIds = new List<string> { _editModel.SelectedRoleId.Trim() };
+            ApiResult<UserAccountDto> result;
+            if (_editingUserId is null)
+            {
+                result = await ApiClient.CreateUserAccountAsync(new CreateUserAccountRequest
+                {
+                    UserId = _editModel.UserId,
+                    UserName = _editModel.UserName,
+                    InitialPassword = DefaultInitialPassword,
+                    Email = _editModel.Email,
+                    Telephone = _editModel.Telephone,
+                    RoleIds = roleIds
+                }, _disposeCts.Token);
+            }
+            else
+            {
+                result = await ApiClient.UpdateUserAccountAsync(
+                    _editingUserId,
+                    new UpdateUserAccountRequest
+                    {
+                        UserName = _editModel.UserName,
+                        Email = _editModel.Email,
+                        Telephone = _editModel.Telephone,
+                        RoleIds = roleIds
+                    },
+                    _disposeCts.Token);
+            }
+
+            if (HandleFailure(result))
+                return;
+
+            _message = _editingUserId is null ? "使用者帳號已新增。" : "使用者帳號已更新。";
+            CancelEdit(clearMessage: false);
+            await LoadPageAsync(_page.Page <= 0 ? 1 : _page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(UserAccountDto user)
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            // SRS：軟刪（DEL_FLG=1）
+            var result = await ApiClient.SetUserAccountStatusAsync(user.UserId, isActive: false, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+            _message = "使用者帳號已刪除。";
+            await LoadPageAsync(_page.Page <= 0 ? 1 : _page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void CancelEdit() => CancelEdit(clearMessage: true);
+
+    private void CancelEdit(bool clearMessage)
+    {
+        _showEditor = false;
+        _editingUserId = null;
+        _editModel = new UserAccountEditModel();
+        if (clearMessage)
+            ClearMessage();
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+        ShowError(result.ErrorMessage);
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/system/users", replace: true);
+        return true;
+    }
+
+    private void ShowError(string? message)
+    {
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗，請稍後再試。" : message;
+        _isError = true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatRoles(IReadOnlyList<RoleOptionDto> roles) =>
+        roles.Count == 0 ? "—" : string.Join("、", roles.Select(role => role.RoleName));
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

@@ -1,0 +1,29 @@
+﻿{
+  "source_file": "DGPM_TableList.xlsx",
+  "conversion_engine": "OpenXml",
+  "converted_date": "2026-07-23T16:03:25",
+  "cleanup": {
+    "actions_count": 1,
+    "actions": [
+      "\u522A\u9664\u8868\u683C\u5E7D\u9748\u5217\uFF1A| 2 |  |  |  |"
+    ]
+  },
+  "openxml_images": null,
+  "openxml_sheets": {
+    "count": 2,
+    "sheet_names": [
+      "TableList",
+      "SysFun"
+    ],
+    "conversion_log": [
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ATableList (1/2)",
+      "\u5DF2\u8F49\u63DB\u5DE5\u4F5C\u8868\uFF1ASysFun (2/2)"
+    ]
+  },
+  "pdf_enhancement": null,
+  "enhancements": {
+    "actions_count": 0,
+    "actions": []
+  },
+  "gaps": []
+}

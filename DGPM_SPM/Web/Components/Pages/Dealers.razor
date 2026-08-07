@@ -1,0 +1,361 @@
+@page "/basic/dealers"
+@inject SpmApiClient ApiClient
+
+<PageTitle>經銷商設定管理 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="基本資料管理" Current="經銷商設定管理" />
+
+<h1 class="page-title">經銷商設定管理</h1>
+<p class="text-secondary">維護經銷商代碼、名稱、所屬區域、幣別、聯絡資訊及啟停用狀態。</p>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="keyword">代碼或名稱</label>
+                <input id="keyword" class="form-control" @bind="_keyword" @bind:event="oninput"
+                       placeholder="輸入經銷商代碼或名稱" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="filter-region">所屬區域</label>
+                <select id="filter-region" class="form-select" @bind="_filterRegionId">
+                    <option value="">全部</option>
+                    @foreach (var option in _regionOptions)
+                    {
+                        <option value="@option.RegionId">@option.RegionCode - @option.RegionName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label" for="status">狀態</label>
+                <select id="status" class="form-select" @bind="_status">
+                    <option value="">全部</option>
+                    <option value="A">啟用</option>
+                    <option value="I">停用</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <button class="btn btn-primary" type="button" @onclick="SearchAsync" disabled="@_loading">查詢</button>
+                <button class="btn btn-outline-secondary" type="button" @onclick="ResetSearchAsync" disabled="@_loading">重設</button>
+                <button class="btn btn-success ms-auto" type="button" @onclick="StartCreate" disabled="@_loading">新增經銷商</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_showEditor)
+{
+    <section class="card mb-3 editor-card">
+        <div class="card-header">@(_editingId.HasValue ? "編輯經銷商" : "新增經銷商")</div>
+        <div class="card-body">
+            <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-code">經銷商代碼</label>
+                        <InputText id="dealer-code" class="form-control" @bind-Value="_editModel.DealerCode" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-name">經銷商名稱</label>
+                        <InputText id="dealer-name" class="form-control" @bind-Value="_editModel.DealerName" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-region">所屬區域</label>
+                        <InputSelect id="dealer-region" class="form-select" @bind-Value="_editModel.RegionId">
+                            <option value="0">請選擇區域</option>
+                            @foreach (var option in _regionOptions)
+                            {
+                                <option value="@option.RegionId">@option.RegionCode - @option.RegionName</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-currency">交易幣別（ISO 4217）</label>
+                        <InputText id="dealer-currency" class="form-control" @bind-Value="_editModel.CurrencyCode"
+                                   placeholder="例如 TWD、USD" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-contact">聯絡人</label>
+                        <InputText id="dealer-contact" class="form-control" @bind-Value="_editModel.ContactName" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-email">聯絡人 Email</label>
+                        <InputText id="dealer-email" class="form-control" @bind-Value="_editModel.ContactEmail" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="dealer-tel">聯絡電話</label>
+                        <InputText id="dealer-tel" class="form-control" @bind-Value="_editModel.ContactTel" />
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <label class="form-label" for="dealer-memo">備註</label>
+                        <InputText id="dealer-memo" class="form-control" @bind-Value="_editModel.Memo" />
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-primary" type="submit" disabled="@_saving">儲存</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="CancelEdit" disabled="@_saving">取消</button>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>經銷商代碼</th>
+                        <th>經銷商名稱</th>
+                        <th>所屬區域</th>
+                        <th>幣別</th>
+                        <th>聯絡人</th>
+                        <th>狀態</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="7" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="7" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var dealer in _page.Datas)
+                        {
+                            <tr>
+                                <td><span class="code-text">@dealer.DealerCode</span></td>
+                                <td>@dealer.DealerName</td>
+                                <td>@(dealer.RegionName ?? "—")</td>
+                                <td>@(dealer.CurrencyCode ?? "—")</td>
+                                <td>@(dealer.ContactName ?? "—")</td>
+                                <td>
+                                    <span class="badge @(dealer.Status == "A" ? "text-bg-success" : "text-bg-secondary")">
+                                        @(dealer.Status == "A" ? "啟用" : "停用")
+                                    </span>
+                                </td>
+                                <td class="text-end action-cell">
+                                    <button class="btn btn-sm btn-outline-primary" type="button"
+                                            @onclick="() => StartEdit(dealer)" disabled="@_loading">編輯</button>
+                                    <button class="btn btn-sm @(dealer.Status == "A" ? "btn-outline-danger" : "btn-outline-success")"
+                                            type="button" @onclick="() => ToggleStatusAsync(dealer)" disabled="@_loading">
+                                        @(dealer.Status == "A" ? "停用" : "啟用")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="經銷商分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private int _pageSize = 10;
+
+    private PagedResult<DealerDto> _page = new();
+    private List<RegionOptionDto> _regionOptions = [];
+    private DealerSaveRequest _editModel = new();
+    private int? _editingId;
+    private string _keyword = string.Empty;
+    private string _filterRegionId = string.Empty;
+    private string _status = string.Empty;
+    private string _message = string.Empty;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRegionOptionsAsync();
+        await LoadPageAsync(1);
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var query = $"api/dealers?page={page}&pageSize={_pageSize}";
+            if (!string.IsNullOrWhiteSpace(_keyword))
+                query += $"&keyword={Uri.EscapeDataString(_keyword.Trim())}";
+            if (!string.IsNullOrWhiteSpace(_filterRegionId))
+                query += $"&regionId={Uri.EscapeDataString(_filterRegionId)}";
+            if (!string.IsNullOrWhiteSpace(_status))
+                query += $"&status={Uri.EscapeDataString(_status)}";
+
+            var result = await ApiClient.GetAsync<PagedResult<DealerDto>>(query);
+            if (result.Succeeded && result.Data is not null)
+            {
+                _page = result.Data;
+                return;
+            }
+
+            ShowError(result.ErrorMessage);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadRegionOptionsAsync()
+    {
+        var result = await ApiClient.GetAsync<List<RegionOptionDto>>("api/regions/options");
+        if (result.Succeeded)
+            _regionOptions = result.Data ?? [];
+        else
+            ShowError(result.ErrorMessage);
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _keyword = string.Empty;
+        _filterRegionId = string.Empty;
+        _status = string.Empty;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void StartCreate()
+    {
+        _editingId = null;
+        _editModel = new DealerSaveRequest();
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void StartEdit(DealerDto dealer)
+    {
+        _editingId = dealer.DealerId;
+        _editModel = new DealerSaveRequest
+        {
+            DealerCode = dealer.DealerCode,
+            DealerName = dealer.DealerName,
+            RegionId = dealer.RegionId,
+            CurrencyCode = dealer.CurrencyCode,
+            ContactName = dealer.ContactName,
+            ContactEmail = dealer.ContactEmail,
+            ContactTel = dealer.ContactTel,
+            Memo = dealer.Memo
+        };
+        _showEditor = true;
+        ClearMessage();
+    }
+
+    private void CancelEdit()
+    {
+        _showEditor = false;
+        _editingId = null;
+        _editModel = new DealerSaveRequest();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var result = _editingId.HasValue
+                ? await ApiClient.PutAsync<DealerDto>($"api/dealers/{_editingId.Value}", _editModel)
+                : await ApiClient.PostAsync<DealerDto>("api/dealers", _editModel);
+
+            if (!result.Succeeded)
+            {
+                ShowError(result.ErrorMessage);
+                return;
+            }
+
+            _showEditor = false;
+            _editingId = null;
+            _editModel = new DealerSaveRequest();
+            ShowSuccess("經銷商資料已儲存。");
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(DealerDto dealer)
+    {
+        ClearMessage();
+        var nextStatus = dealer.Status == "A" ? "I" : "A";
+        var result = await ApiClient.PutAsync<bool>(
+            $"api/dealers/{dealer.DealerId}/status",
+            new DealerStatusRequest { Status = nextStatus });
+
+        if (!result.Succeeded)
+        {
+            ShowError(result.ErrorMessage);
+            return;
+        }
+
+        ShowSuccess($"經銷商已{(nextStatus == "A" ? "啟用" : "停用")}。");
+        await LoadPageAsync(_page.Page);
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _message = message;
+        _isError = false;
+    }
+
+    private void ShowError(string message)
+    {
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗，請稍後再試。" : message;
+        _isError = true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = string.Empty;
+        _isError = false;
+    }
+}

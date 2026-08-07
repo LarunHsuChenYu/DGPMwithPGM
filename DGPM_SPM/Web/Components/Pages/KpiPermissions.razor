@@ -1,0 +1,408 @@
+@page "/system/kpi-permissions"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>KPI 資料權限管理 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="系統權限管理" Current="KPI 資料權限管理" />
+
+<h1 class="page-title">KPI 資料權限管理</h1>
+<p class="page-desc">查詢使用者帳號，設定其可存取的 KPI 資料範圍（區域或經銷商），儲存時整批覆寫。</p>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="query-user-id">使用者帳號</label>
+                <input id="query-user-id" class="form-control" maxlength="50"
+                       @bind="_queryUserId" placeholder="輸入使用者帳號（USER_ID）"
+                       @onkeydown="OnQueryKeyDown" />
+            </div>
+            <div class="col-12 col-md-4 d-flex gap-2">
+                <button type="button" class="btn btn-primary" disabled="@_loading" @onclick="LoadPermissionAsync">查詢</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_loading" @onclick="ResetAsync">清除</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <section class="card"><div class="card-body text-secondary">載入中…</div></section>
+}
+else if (_permission is not null)
+{
+    <section class="card mb-3">
+        <div class="card-body d-flex flex-wrap gap-4">
+            <div><span class="text-secondary me-1">帳號：</span><span class="fw-semibold">@_permission.UserId</span></div>
+            <div><span class="text-secondary me-1">姓名：</span><span class="fw-semibold">@_permission.UserName</span></div>
+            <div>
+                <span class="text-secondary me-1">目前授權：</span>
+                <span class="fw-semibold">@_selectedRegionIds.Count 個區域、@_selectedDealers.Count 個經銷商</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="card mb-3">
+        <div class="card-header">區域範圍（R）</div>
+        <div class="card-body">
+            @if (_regionOptions.Count == 0)
+            {
+                <p class="text-secondary mb-0">目前沒有可選擇的區域。</p>
+            }
+            else
+            {
+                <div class="row g-2">
+                    @foreach (var option in _regionOptions)
+                    {
+                        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="region-@option.RegionId"
+                                       checked="@_selectedRegionIds.Contains(option.RegionId)"
+                                       disabled="@_saving"
+                                       @onchange="e => ToggleRegion(option.RegionId, e.Value)" />
+                                <label class="form-check-label" for="region-@option.RegionId">
+                                    @option.RegionCode - @option.RegionName
+                                </label>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="card mb-3">
+        <div class="card-header">經銷商範圍（D）</div>
+        <div class="card-body">
+            <h2 class="h6">已選經銷商</h2>
+            @if (_selectedDealers.Count == 0)
+            {
+                <p class="text-secondary">尚未選擇任何經銷商。</p>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    @foreach (var dealer in _selectedDealers.OrderBy(d => d.Value))
+                    {
+                        <span class="badge text-bg-light border d-inline-flex align-items-center gap-2">
+                            @dealer.Value
+                            <button type="button" class="btn-close" style="font-size: .6rem;"
+                                    aria-label="移除 @dealer.Value" disabled="@_saving"
+                                    @onclick="() => RemoveDealer(dealer.Key)"></button>
+                        </span>
+                    }
+                </div>
+            }
+
+            <h2 class="h6 mt-3">加入經銷商</h2>
+            <div class="row g-2 align-items-end mb-2">
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="dealer-keyword">代碼或名稱</label>
+                    <input id="dealer-keyword" class="form-control" maxlength="200"
+                           @bind="_dealerKeyword" placeholder="輸入經銷商代碼或名稱" />
+                </div>
+                <div class="col-12 col-md-3 d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary" disabled="@_dealerLoading" @onclick="SearchDealersAsync">搜尋</button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>經銷商代碼</th>
+                            <th>經銷商名稱</th>
+                            <th>所屬區域</th>
+                            <th class="text-end">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_dealerLoading)
+                        {
+                            <tr><td colspan="4" class="empty-cell">載入中…</td></tr>
+                        }
+                        else if (_dealerPage.Datas.Count == 0)
+                        {
+                            <tr><td colspan="4" class="empty-cell">查無資料，請輸入關鍵字搜尋。</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var dealer in _dealerPage.Datas)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@dealer.DealerCode</td>
+                                    <td>@dealer.DealerName</td>
+                                    <td>@dealer.RegionName</td>
+                                    <td class="text-end">
+                                        @if (_selectedDealers.ContainsKey(dealer.DealerId))
+                                        {
+                                            <span class="badge text-bg-success">已選</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    disabled="@_saving" @onclick="() => AddDealer(dealer)">加入</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_dealerPage.TotalRow > 0)
+            {
+                <Pager CurrentPage="_dealerPage.Page"
+                       TotalPages="_dealerPage.TotalPages"
+                       TotalRows="_dealerPage.TotalRow"
+                       FromRow="_dealerFromRow"
+                       ToRow="_dealerToRow"
+                       @bind-PageSize="_dealerPageSize"
+                       Loading="_dealerLoading"
+                       AriaLabel="經銷商挑選分頁"
+                       OnPageChanged="LoadDealersPageAsync"
+                       OnApplyPageSize="ApplyDealerPageSizeAsync" />
+            }
+        </div>
+    </section>
+
+    <div class="d-flex gap-2 mb-3">
+        <button type="button" class="btn btn-primary" disabled="@_saving" @onclick="SaveAsync">
+            @(_saving ? "儲存中…" : "儲存授權")
+        </button>
+    </div>
+}
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+
+    private string? _queryUserId;
+    private KpiUserPermissionDto? _permission;
+    private List<RegionOptionDto> _regionOptions = [];
+    private readonly HashSet<int> _selectedRegionIds = [];
+
+    /// <summary>已選經銷商：DealerId → 顯示文字（代碼 - 名稱）。</summary>
+    private readonly Dictionary<int, string> _selectedDealers = [];
+
+    private PagedResult<DealerDto> _dealerPage = new();
+    private string? _dealerKeyword;
+    private int _dealerPageSize = 10;
+
+    private int _dealerFromRow => _dealerPage.TotalRow == 0
+        ? 0
+        : (_dealerPage.PageSize <= 0 ? 1 : (_dealerPage.Page - 1) * _dealerPage.PageSize + 1);
+    private int _dealerToRow => _dealerPage.PageSize <= 0
+        ? _dealerPage.TotalRow
+        : Math.Min(_dealerPage.Page * _dealerPage.PageSize, _dealerPage.TotalRow);
+
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _dealerLoading;
+    private bool _saving;
+
+    private Task OnQueryKeyDown(KeyboardEventArgs e)
+        => e.Key == "Enter" ? LoadPermissionAsync() : Task.CompletedTask;
+
+    private async Task LoadPermissionAsync()
+    {
+        ClearMessage();
+        var userId = _queryUserId?.Trim();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            ShowError("請輸入使用者帳號。");
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetKpiUserPermissionAsync(userId, _disposeCts.Token);
+            if (HandleFailure(result, notFoundMessage: "查無此使用者帳號，請確認輸入內容。"))
+            {
+                _permission = null;
+                return;
+            }
+
+            ApplyPermission(result.Data);
+
+            if (_regionOptions.Count == 0)
+                await LoadRegionOptionsAsync();
+
+            _dealerKeyword = null;
+            _dealerPage = new PagedResult<DealerDto>();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyPermission(KpiUserPermissionDto? permission)
+    {
+        _permission = permission ?? new KpiUserPermissionDto();
+
+        _selectedRegionIds.Clear();
+        foreach (var scope in _permission.RegionScopes)
+        {
+            if (scope.RegionId.HasValue)
+                _selectedRegionIds.Add(scope.RegionId.Value);
+        }
+
+        _selectedDealers.Clear();
+        foreach (var scope in _permission.DealerScopes)
+        {
+            if (scope.DealerId.HasValue)
+                _selectedDealers[scope.DealerId.Value] = FormatDealer(scope.DealerCode, scope.DealerName);
+        }
+    }
+
+    private async Task LoadRegionOptionsAsync()
+    {
+        var result = await ApiClient.GetAsync<List<RegionOptionDto>>("api/regions/options", _disposeCts.Token);
+        if (!HandleFailure(result))
+            _regionOptions = result.Data ?? [];
+
+        // 既有授權可能包含已停用（不在 options 內）的區域，補進清單避免看不到也改不掉。
+        if (_permission is null)
+            return;
+
+        foreach (var scope in _permission.RegionScopes)
+        {
+            if (scope.RegionId.HasValue && _regionOptions.All(o => o.RegionId != scope.RegionId.Value))
+            {
+                _regionOptions.Add(new RegionOptionDto
+                {
+                    RegionId = scope.RegionId.Value,
+                    RegionCode = scope.RegionCode ?? scope.RegionId.Value.ToString(),
+                    RegionName = scope.RegionName ?? "（已停用）"
+                });
+            }
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        _queryUserId = null;
+        _permission = null;
+        _selectedRegionIds.Clear();
+        _selectedDealers.Clear();
+        _dealerPage = new PagedResult<DealerDto>();
+        _dealerKeyword = null;
+        ClearMessage();
+        await Task.CompletedTask;
+    }
+
+    private void ToggleRegion(int regionId, object? isChecked)
+    {
+        if (isChecked is true)
+            _selectedRegionIds.Add(regionId);
+        else
+            _selectedRegionIds.Remove(regionId);
+    }
+
+    private void AddDealer(DealerDto dealer)
+        => _selectedDealers[dealer.DealerId] = FormatDealer(dealer.DealerCode, dealer.DealerName);
+
+    private void RemoveDealer(int dealerId)
+        => _selectedDealers.Remove(dealerId);
+
+    private async Task SearchDealersAsync()
+    {
+        await LoadDealersPageAsync(1);
+    }
+
+    private async Task LoadDealersPageAsync(int page)
+    {
+        _dealerLoading = true;
+        try
+        {
+            var query = $"api/dealers?page={page}&pageSize={_dealerPageSize}&status=A";
+            if (!string.IsNullOrWhiteSpace(_dealerKeyword))
+                query += $"&keyword={Uri.EscapeDataString(_dealerKeyword.Trim())}";
+
+            var result = await ApiClient.GetAsync<PagedResult<DealerDto>>(query, _disposeCts.Token);
+            if (!HandleFailure(result))
+                _dealerPage = result.Data ?? new PagedResult<DealerDto>();
+        }
+        finally
+        {
+            _dealerLoading = false;
+        }
+    }
+
+    private async Task ApplyDealerPageSizeAsync()
+    {
+        await LoadDealersPageAsync(1);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_permission is null)
+            return;
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var request = new SaveKpiUserPermissionRequest
+            {
+                RegionIds = _selectedRegionIds.ToList(),
+                DealerIds = _selectedDealers.Keys.ToList()
+            };
+
+            var result = await ApiClient.SaveKpiUserPermissionAsync(_permission.UserId, request, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+
+            ApplyPermission(result.Data);
+            _message = "KPI 資料權限已儲存。";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result, string? notFoundMessage = null)
+    {
+        if (result.Succeeded)
+            return false;
+
+        _isError = true;
+        _message = notFoundMessage is not null && result.ErrorCode == "404"
+            ? notFoundMessage
+            : result.ErrorMessage;
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/system/kpi-permissions", replace: true);
+        return true;
+    }
+
+    private void ShowError(string message)
+    {
+        _isError = true;
+        _message = message;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    private static string FormatDealer(string? code, string? name)
+        => string.IsNullOrWhiteSpace(code) ? name ?? string.Empty : $"{code} - {name}";
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PGM.Core</RootNamespace>
+    <AssemblyName>PGM.Core</AssemblyName>
+
+    <!-- Mapperly 欄位對不上時直接 build 失敗，不留到 runtime -->
+    <WarningsAsErrors>$(WarningsAsErrors);RMG020;RMG012;RMG089</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageReference Include="Riok.Mapperly" Version="4.3.1" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+  </ItemGroup>
+
+  <!--
+    Core 不允許有任何 <ProjectReference>。
+    如果看到有人加了對 Infrastructure 的引用，代表分層又被破壞了。
+    （由 tests/Architecture.Tests 自動守護）
+  -->
+
+</Project>

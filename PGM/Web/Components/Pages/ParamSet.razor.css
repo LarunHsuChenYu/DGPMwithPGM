@@ -1,0 +1,60 @@
+/* 對齊 ParamSet SRS 設計稿：代碼類別標籤列 + 查詢、青色表頭、Action 欄 */
+
+.param-filter {
+    border: 1px solid #222;
+    background: #fff;
+    padding: 0.65rem 0.75rem;
+}
+
+.param-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.5rem;
+}
+
+.param-filter-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.5rem;
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    background: #cbb8e8;
+    border: 1px solid #222;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.param-filter-field {
+    flex: 1 1 14rem;
+    max-width: 22rem;
+}
+
+.param-filter-field .form-select {
+    border-color: #222;
+    border-radius: 0;
+}
+
+.param-filter-query {
+    border-radius: 0.15rem;
+    min-width: 4.5rem;
+}
+
+.param-set-table thead th {
+    background: #7fd6e8;
+    font-weight: 600;
+    border-color: #222;
+}
+
+.param-set-table td,
+.param-set-table th {
+    border-color: #222;
+    vertical-align: middle;
+}
+
+.param-set-table .empty-cell {
+    text-align: center;
+    color: #666;
+    padding: 1.25rem;
+}

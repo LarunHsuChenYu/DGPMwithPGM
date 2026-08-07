@@ -1,0 +1,27 @@
+.editor-card {
+    border-color: #93c5fd;
+}
+
+.editor-card .card-header {
+    background: #eff6ff;
+    font-weight: 600;
+}
+
+.empty-cell {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: #6b7280;
+}
+
+.code-text {
+    font-family: Consolas, "Courier New", monospace;
+    font-weight: 600;
+}
+
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell .btn + .btn {
+    margin-left: .35rem;
+}

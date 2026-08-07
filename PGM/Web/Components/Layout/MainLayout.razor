@@ -1,0 +1,153 @@
+@inherits LayoutComponentBase
+@inject PgmApiClient ApiClient
+@inject SpmAuthenticationStateProvider AuthProvider
+@inject AuthTokenStore TokenStore
+@inject NavigationManager Navigation
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu @key="_menuRefreshKey" />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="role-switch">
+                        <label class="role-label" for="header-role">角色:</label>
+                        <select id="header-role"
+                                class="role-select"
+                                disabled="@(_switchingRole || _loggingOut || _roles.Count == 0)"
+                                value="@_selectedRoleId"
+                                @onchange="OnRoleChangedAsync">
+                            <option value="">請選擇</option>
+                            @foreach (var role in _roles)
+                            {
+                                <option value="@role.RoleId">@role.RoleName</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm logout-btn"
+                            disabled="@_loggingOut" @onclick="LogoutAsync">
+                        @(_loggingOut ? "登出中…" : "登出")
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    系統發生未預期的錯誤。
+    <a href="." class="reload">重新載入</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _loggingOut;
+    private bool _switchingRole;
+    private string _selectedRoleId = string.Empty;
+    private string _menuRefreshKey = Guid.NewGuid().ToString("N");
+    private List<RoleOption> _roles = [];
+
+    private sealed record RoleOption(string RoleId, string RoleName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoleOptionsAsync();
+    }
+
+    private async Task LoadRoleOptionsAsync()
+    {
+        var session = await TokenStore.GetAsync();
+        if (session is null)
+        {
+            _roles = [];
+            _selectedRoleId = string.Empty;
+            return;
+        }
+
+        var rolesResult = await ApiClient.GetMyRolesAsync();
+        if (rolesResult.Succeeded && rolesResult.Data is { Count: > 0 })
+        {
+            _roles = rolesResult.Data
+                .Select(r => new RoleOption(r.RoleId, r.RoleName))
+                .ToList();
+        }
+        else
+        {
+            // API 失敗時退回 session 目前角色，避免下拉空白。
+            var roleId = ExtractRoleId(session.User.RoleId);
+            var roleName = string.IsNullOrWhiteSpace(session.User.RoleName)
+                ? roleId
+                : session.User.RoleName!;
+            _roles = string.IsNullOrWhiteSpace(roleId)
+                ? []
+                : [new RoleOption(roleId, roleName)];
+        }
+
+        // 與 JWT 目前角色對齊（非空白「請選擇」），側欄才能立刻顯示對應選單。
+        _selectedRoleId = ExtractRoleId(session.User.RoleId);
+    }
+
+    private async Task OnRoleChangedAsync(ChangeEventArgs e)
+    {
+        var nextRoleId = e.Value?.ToString() ?? string.Empty;
+        if (string.Equals(nextRoleId, _selectedRoleId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var previous = _selectedRoleId;
+        _selectedRoleId = nextRoleId;
+
+        if (string.IsNullOrWhiteSpace(nextRoleId))
+        {
+            // 「請選擇」僅 UI 狀態；不改 JWT／選單。
+            return;
+        }
+
+        _switchingRole = true;
+        try
+        {
+            var result = await ApiClient.SwitchRoleAsync(new SwitchRoleRequest { RoleId = nextRoleId });
+            if (!result.Succeeded || result.Data is null)
+            {
+                _selectedRoleId = previous;
+                return;
+            }
+
+            await AuthProvider.SignInAsync(AuthSession.FromLogin(result.Data));
+            _menuRefreshKey = Guid.NewGuid().ToString("N");
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _switchingRole = false;
+        }
+    }
+
+    private static string ExtractRoleId(string? composedOrPlain)
+    {
+        if (string.IsNullOrWhiteSpace(composedOrPlain))
+            return string.Empty;
+        return composedOrPlain.Split('$')[0];
+    }
+
+    private async Task LogoutAsync()
+    {
+        _loggingOut = true;
+        try
+        {
+            await ApiClient.LogoutAsync();
+        }
+        finally
+        {
+            await AuthProvider.SignOutAsync();
+            _loggingOut = false;
+            Navigation.NavigateTo("/login", replace: true);
+        }
+    }
+}

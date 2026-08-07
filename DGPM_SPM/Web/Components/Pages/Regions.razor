@@ -1,0 +1,341 @@
+@page "/basic/regions"
+@inject SpmApiClient ApiClient
+
+<PageTitle>區域組織管理 - DGPM SPM</PageTitle>
+
+<PageBreadcrumb Module="基本資料管理" Current="區域組織管理" />
+
+<h1 class="page-title">區域組織管理</h1>
+<p class="text-secondary">維護區域代碼、名稱、上層區域及啟停用狀態。</p>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+
+<section class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label" for="keyword">代碼或名稱</label>
+                <input id="keyword" class="form-control" @bind="_keyword" @bind:event="oninput"
+                       placeholder="輸入區域代碼或名稱" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="status">狀態</label>
+                <select id="status" class="form-select" @bind="_status">
+                    <option value="">全部</option>
+                    <option value="A">啟用</option>
+                    <option value="I">停用</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 d-flex gap-2">
+                <button class="btn btn-primary" type="button" @onclick="SearchAsync" disabled="@_loading">查詢</button>
+                <button class="btn btn-outline-secondary" type="button" @onclick="ResetSearchAsync" disabled="@_loading">重設</button>
+                <button class="btn btn-success ms-auto" type="button" @onclick="StartCreateAsync" disabled="@_loading">新增區域</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_showEditor)
+{
+    <section class="card mb-3 editor-card">
+        <div class="card-header">@(_editingId.HasValue ? "編輯區域" : "新增區域")</div>
+        <div class="card-body">
+            <EditForm Model="_editModel" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="region-code">區域代碼</label>
+                        <InputText id="region-code" class="form-control" @bind-Value="_editModel.RegionCode" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="region-name">區域名稱</label>
+                        <InputText id="region-name" class="form-control" @bind-Value="_editModel.RegionName" />
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="parent-region">上層區域</label>
+                        <InputSelect id="parent-region" class="form-select" @bind-Value="_editModel.ParentRegionId">
+                            <option value="">（最上層）</option>
+                            @foreach (var option in _parentOptions)
+                            {
+                                <option value="@option.RegionId">@option.RegionCode - @option.RegionName</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="sort-order">排序</label>
+                        <InputNumber id="sort-order" class="form-control" @bind-Value="_editModel.SortOrder" />
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-primary" type="submit" disabled="@_saving">儲存</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="CancelEditAsync" disabled="@_saving">取消</button>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+<section class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>區域代碼</th>
+                        <th>區域名稱</th>
+                        <th>上層區域</th>
+                        <th class="text-end">排序</th>
+                        <th>狀態</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="6" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (_page.Datas.Count == 0)
+                    {
+                        <tr><td colspan="6" class="empty-cell">查無資料</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var region in _page.Datas)
+                        {
+                            <tr>
+                                <td><span class="code-text">@region.RegionCode</span></td>
+                                <td>@region.RegionName</td>
+                                <td>@(region.ParentRegionName ?? "—")</td>
+                                <td class="text-end">@region.SortOrder</td>
+                                <td>
+                                    <span class="badge @(region.Status == "A" ? "text-bg-success" : "text-bg-secondary")">
+                                        @(region.Status == "A" ? "啟用" : "停用")
+                                    </span>
+                                </td>
+                                <td class="text-end action-cell">
+                                    <button class="btn btn-sm btn-outline-primary" type="button"
+                                            @onclick="() => StartEditAsync(region)" disabled="@_loading">編輯</button>
+                                    <button class="btn btn-sm @(region.Status == "A" ? "btn-outline-danger" : "btn-outline-success")"
+                                            type="button" @onclick="() => ToggleStatusAsync(region)" disabled="@_loading">
+                                        @(region.Status == "A" ? "停用" : "啟用")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (_page.TotalRow > 0)
+    {
+        <Pager CurrentPage="_page.Page"
+               TotalPages="_page.TotalPages"
+               TotalRows="_page.TotalRow"
+               FromRow="_fromRow"
+               ToRow="_toRow"
+               @bind-PageSize="_pageSize"
+               Loading="_loading"
+               AriaLabel="區域分頁"
+               OnPageChanged="LoadPageAsync"
+               OnApplyPageSize="ApplyPageSizeAsync" />
+    }
+</section>
+
+@code {
+    private int _pageSize = 10;
+
+    private PagedResult<RegionDto> _page = new();
+    private List<RegionOptionDto> _parentOptions = [];
+    private RegionSaveRequest _editModel = new();
+    private int? _editingId;
+    private string _keyword = string.Empty;
+    private string _status = string.Empty;
+    private string _message = string.Empty;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _showEditor;
+
+    private int _fromRow => _page.TotalRow == 0
+        ? 0
+        : (_page.PageSize <= 0 ? 1 : (_page.Page - 1) * _page.PageSize + 1);
+    private int _toRow => _page.PageSize <= 0
+        ? _page.TotalRow
+        : Math.Min(_page.Page * _page.PageSize, _page.TotalRow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOptionsAsync();
+        await LoadPageAsync(1);
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        _loading = true;
+        try
+        {
+            var query = $"api/regions?page={page}&pageSize={_pageSize}";
+            if (!string.IsNullOrWhiteSpace(_keyword))
+                query += $"&keyword={Uri.EscapeDataString(_keyword.Trim())}";
+            if (!string.IsNullOrWhiteSpace(_status))
+                query += $"&status={Uri.EscapeDataString(_status)}";
+
+            var result = await ApiClient.GetAsync<PagedResult<RegionDto>>(query);
+            if (result.Succeeded && result.Data is not null)
+            {
+                _page = result.Data;
+                return;
+            }
+
+            ShowError(result.ErrorMessage);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadOptionsAsync(int? excludeRegionId = null)
+    {
+        var url = "api/regions/options";
+        if (excludeRegionId.HasValue)
+            url += $"?excludeRegionId={excludeRegionId.Value}";
+
+        var result = await ApiClient.GetAsync<List<RegionOptionDto>>(url);
+        if (result.Succeeded)
+            _parentOptions = result.Data ?? [];
+        else
+            ShowError(result.ErrorMessage);
+    }
+
+    private async Task SearchAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task ResetSearchAsync()
+    {
+        _keyword = string.Empty;
+        _status = string.Empty;
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private async Task StartCreateAsync()
+    {
+        _editingId = null;
+        _editModel = new RegionSaveRequest();
+        _showEditor = true;
+        ClearMessage();
+        await LoadOptionsAsync();
+    }
+
+    private async Task StartEditAsync(RegionDto region)
+    {
+        _editingId = region.RegionId;
+        _editModel = new RegionSaveRequest
+        {
+            RegionCode = region.RegionCode,
+            RegionName = region.RegionName,
+            ParentRegionId = region.ParentRegionId,
+            SortOrder = region.SortOrder
+        };
+        _showEditor = true;
+        ClearMessage();
+        await LoadOptionsAsync(region.RegionId);
+    }
+
+    private async Task CancelEditAsync()
+    {
+        _showEditor = false;
+        _editingId = null;
+        _editModel = new RegionSaveRequest();
+        await LoadOptionsAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            ApiResult<RegionDto> result;
+            if (_editingId.HasValue)
+            {
+                result = await ApiClient.PutAsync<RegionDto>(
+                    $"api/regions/{_editingId.Value}",
+                    _editModel);
+            }
+            else
+            {
+                result = await ApiClient.PostAsync<RegionDto>("api/regions", _editModel);
+            }
+
+            if (!result.Succeeded)
+            {
+                ShowError(result.ErrorMessage);
+                return;
+            }
+
+            _showEditor = false;
+            _editingId = null;
+            _editModel = new RegionSaveRequest();
+            ShowSuccess("區域資料已儲存。");
+            await LoadOptionsAsync();
+            await LoadPageAsync(_page.Page);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(RegionDto region)
+    {
+        ClearMessage();
+        var nextStatus = region.Status == "A" ? "I" : "A";
+        var result = await ApiClient.PutAsync<bool>(
+            $"api/regions/{region.RegionId}/status",
+            new RegionStatusRequest { Status = nextStatus });
+
+        if (!result.Succeeded)
+        {
+            ShowError(result.ErrorMessage);
+            return;
+        }
+
+        ShowSuccess($"區域已{(nextStatus == "A" ? "啟用" : "停用")}。");
+        await LoadOptionsAsync(_editingId);
+        await LoadPageAsync(_page.Page);
+    }
+
+    private async Task ApplyPageSizeAsync()
+    {
+        ClearMessage();
+        await LoadPageAsync(1);
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _message = message;
+        _isError = false;
+    }
+
+    private void ShowError(string message)
+    {
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗，請稍後再試。" : message;
+        _isError = true;
+    }
+
+    private void ClearMessage()
+    {
+        _message = string.Empty;
+        _isError = false;
+    }
+}

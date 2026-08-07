@@ -1,0 +1,27 @@
+@page "/"
+@inject AuthTokenStore TokenStore
+@inject PgmApiClient ApiClient
+
+<PageTitle>首頁 - PGM</PageTitle>
+
+<div class="home-hero">
+    <h1 class="home-title">PGM</h1>
+    <p class="home-subtitle">報表系統</p>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // 背景同步選單快取（側欄同源），不影響首頁設計稿視覺。
+        var session = await TokenStore.GetAsync();
+        if (session is null)
+            return;
+
+        var apiResult = await ApiClient.GetMenusAsync();
+        if (apiResult.Succeeded && apiResult.Data is not null)
+        {
+            session.Menus = apiResult.Data;
+            await TokenStore.SetAsync(session);
+        }
+    }
+}

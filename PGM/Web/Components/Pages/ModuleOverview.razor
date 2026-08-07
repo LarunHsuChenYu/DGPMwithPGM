@@ -1,0 +1,89 @@
+@page "/module/{FunctionId}"
+@inject AuthTokenStore TokenStore
+@inject PgmApiClient ApiClient
+
+<PageTitle>@(_module?.Title ?? "模組") - DGPM SPM</PageTitle>
+
+<nav class="breadcrumb-line text-secondary mb-2" aria-label="breadcrumb">
+    <a href="/">首頁</a><span> 〉 </span><strong>@(_module?.Title ?? FunctionId)</strong>
+</nav>
+
+@if (_loading)
+{
+    <p class="text-secondary">載入中…</p>
+}
+else if (_module is null)
+{
+    <h1 class="page-title">找不到模組</h1>
+    <p class="page-desc">此模組不存在，或您沒有可進入的子功能權限。</p>
+    <a class="btn btn-primary" href="/">回到首頁</a>
+}
+else
+{
+    <h1 class="page-title">@_module.Title</h1>
+    <p class="page-desc">請選擇要進入的功能。</p>
+
+    var children = _module.Children ?? [];
+    if (children.Count == 0)
+    {
+        <div class="alert alert-warning" role="alert">目前沒有可進入的子功能，或您沒有權限。</div>
+        <a class="btn btn-outline-secondary" href="/">回到首頁</a>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3">
+            @foreach (var item in children)
+            {
+                <div class="col">
+                    <a class="module-card card h-100" href="@(item.Url ?? "#")">
+                        <div class="card-body">
+                            <div class="module-title">@item.Title</div>
+                            @if (!string.IsNullOrWhiteSpace(item.Url))
+                            {
+                                <div class="module-desc">@item.Url</div>
+                            }
+                        </div>
+                    </a>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public string FunctionId { get; set; } = string.Empty;
+
+    private NavMenuItem? _module;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _module = null;
+
+        var session = await TokenStore.GetAsync();
+        if (session is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        IReadOnlyList<NavMenuItem> modules;
+        var apiResult = await ApiClient.GetMenusAsync();
+        if (apiResult.Succeeded && apiResult.Data is not null)
+        {
+            session.Menus = apiResult.Data;
+            await TokenStore.SetAsync(session);
+            modules = NavMenuItems.Build(apiResult.Data);
+        }
+        else
+        {
+            modules = NavMenuItems.Build(session.Menus);
+        }
+
+        _module = modules.FirstOrDefault(m =>
+            string.Equals(m.FunctionId, FunctionId, StringComparison.OrdinalIgnoreCase));
+        _loading = false;
+    }
+}

@@ -1,0 +1,149 @@
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 3.5rem;
+    height: 2.5rem;
+    color: #ffffff;
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.85%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.75rem rgba(255, 255, 255, 0.12);
+}
+
+.navbar-toggler:checked {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.top-row {
+    min-height: auto;
+    background-color: #1e3a6e;
+    padding: 18px 12px 14px;
+    border: 0;
+}
+
+.navbar-brand {
+    display: block;
+    padding: 0 8px 4px;
+    margin: 0;
+    width: 100%;
+    color: #ffffff;
+    text-decoration: none;
+    border: 0;
+}
+
+.brand-title {
+    display: block;
+    color: #ffffff;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.sideNav {
+    display: grid;
+    gap: 2px;
+    padding: 8px 0 16px;
+}
+
+.navGroup {
+    margin: 0;
+}
+
+.navGroupButton {
+    width: 100%;
+    min-height: 40px;
+    display: grid;
+    grid-template-columns: 1fr 20px;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #ffffff;
+    padding: 0 20px;
+    text-align: left;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.navGroupButton:hover,
+.navGroupButton.isActive {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.chevron {
+    text-align: right;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.75rem;
+}
+
+.navSubItems {
+    display: none;
+    padding: 2px 0 6px 12px;
+}
+
+.navGroup.isOpen .navSubItems {
+    display: grid;
+    gap: 2px;
+}
+
+.navSubItems ::deep a {
+    display: block;
+    border-radius: 0;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 8px 20px;
+    font-size: 0.875rem;
+    font-weight: 400;
+    text-decoration: none;
+}
+
+.navSubItems ::deep a:hover,
+.navSubItems ::deep a.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+/* 扁平頂層連結（無展開群組；對齊設計稿側欄） */
+.sideNav ::deep a.navTopLink {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    border-radius: 0;
+    color: #ffffff;
+    padding: 0 20px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.sideNav ::deep a.navTopLink:hover,
+.sideNav ::deep a.navTopLink.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.nav-scrollable {
+    display: none;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+}
+
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        display: block;
+        height: calc(100vh - 4.5rem);
+        overflow-y: auto;
+        padding-bottom: 1rem;
+    }
+}

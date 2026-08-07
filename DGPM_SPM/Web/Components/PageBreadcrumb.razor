@@ -1,0 +1,11 @@
+<nav class="breadcrumb-line text-secondary mb-2" aria-label="breadcrumb">
+    <a href="/">首頁</a><span> 〉 </span><span>@Module</span><span> 〉 </span><strong>@Current</strong>
+</nav>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Module { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Current { get; set; } = string.Empty;
+}
