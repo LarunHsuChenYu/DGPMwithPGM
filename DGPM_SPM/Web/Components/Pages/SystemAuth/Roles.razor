@@ -1,0 +1,243 @@
+﻿@page "/system/roles"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>角色權限設定 - DGPM</PageTitle>
+
+<PageBreadcrumb Module="系統管理權限" Current="角色權限設定" />
+
+<h1 class="page-title mb-3">角色權限設定</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+@* 對齊 RoleFunctionSet SRS：角色下拉 *@
+<section class="role-filter mb-3">
+    <div class="role-filter-row">
+        <label class="role-filter-label" for="role-select">角色</label>
+        <div class="role-filter-field">
+            <select id="role-select" class="form-select" value="@_selectedRoleId"
+                    disabled="@(_loading || _saving)" @onchange="OnRoleSelectChangedAsync">
+                <option value="">-- 請選擇 --</option>
+                @foreach (var role in _roles)
+                {
+                    <option value="@role.RoleId">@role.RoleName</option>
+                }
+            </select>
+        </div>
+    </div>
+</section>
+
+<section class="card mb-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 role-fun-table">
+                <thead>
+                    <tr>
+                        <th class="col-check">
+                            <button type="button" class="role-confirm-btn"
+                                    disabled="@(_saving || _loading)"
+                                    @onclick="ConfirmAsync">
+                                @(_saving ? "儲存中…" : "確認")
+                            </button>
+                        </th>
+                        <th>功能代碼</th>
+                        <th>功能名稱</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="3" class="empty-cell">載入中…</td></tr>
+                    }
+                    else if (string.IsNullOrWhiteSpace(_selectedRoleId))
+                    {
+                        <tr><td colspan="3" class="empty-cell">請先選擇角色</td></tr>
+                    }
+                    else if (_functions.Count == 0)
+                    {
+                        <tr><td colspan="3" class="empty-cell">目前沒有可設定的系統功能</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _functions)
+                        {
+                            <tr>
+                                <td class="col-check text-center">
+                                    <input class="form-check-input" type="checkbox"
+                                           id="fn-@item.FunctionId"
+                                           checked="@_checkedFunctionIds.Contains(item.FunctionId)"
+                                           disabled="@_saving"
+                                           @onchange="e => ToggleFunction(item.FunctionId, (bool)e.Value!)" />
+                                </td>
+                                <td>@item.FunctionId</td>
+                                <td>@item.FunctionName</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private IReadOnlyList<RoleDto> _roles = [];
+    private string _selectedRoleId = string.Empty;
+    private IReadOnlyList<RoleFunctionDto> _functions = [];
+    private HashSet<string> _checkedFunctionIds = new(StringComparer.OrdinalIgnoreCase);
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRolesAsync();
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        _loading = true;
+        ClearMessage();
+        try
+        {
+            // SRS：DIM_ROLE 且 DEL_FLG=0（畫面只讀）
+            var result = await ApiClient.GetRolesAsync(
+                keyword: null,
+                isActive: true,
+                page: 1,
+                pageSize: 500,
+                ct: _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            _roles = result.Data?.Datas ?? [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task OnRoleSelectChangedAsync(ChangeEventArgs e) =>
+        OnRoleChangedAsync(e.Value?.ToString());
+
+    private async Task OnRoleChangedAsync(string? roleId)
+    {
+        _selectedRoleId = roleId?.Trim() ?? string.Empty;
+        _functions = [];
+        _checkedFunctionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        ClearMessage();
+
+        if (string.IsNullOrWhiteSpace(_selectedRoleId))
+            return;
+
+        _loading = true;
+        try
+        {
+            var result = await ApiClient.GetRolePermissionsAsync(_selectedRoleId, _disposeCts.Token);
+            if (HandleFailure(result))
+                return;
+
+            if (result.Data is null)
+            {
+                ShowError("找不到指定的角色。");
+                _selectedRoleId = string.Empty;
+                return;
+            }
+
+            // SRS Grid：全部未刪功能 LEFT JOIN 該角色授權；依 SORT_ID 排序
+            _functions = result.Data.Functions
+                .OrderBy(f => f.SortId)
+                .ThenBy(f => f.FunctionId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            _checkedFunctionIds = _functions
+                .Where(f => f.Granted)
+                .Select(f => f.FunctionId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleFunction(string functionId, bool isChecked)
+    {
+        if (isChecked)
+            _checkedFunctionIds.Add(functionId);
+        else
+            _checkedFunctionIds.Remove(functionId);
+    }
+
+    private async Task ConfirmAsync()
+    {
+        // SRS：確認前必須已選角色；可全不勾選＝該角色無權限；先刪後插
+        if (string.IsNullOrWhiteSpace(_selectedRoleId))
+        {
+            ShowError("請先選擇角色。");
+            return;
+        }
+
+        _saving = true;
+        ClearMessage();
+        try
+        {
+            var request = new SaveRolePermissionsRequest
+            {
+                FunctionIds = _checkedFunctionIds.ToList()
+            };
+            var result = await ApiClient.SaveRolePermissionsAsync(
+                _selectedRoleId, request, _disposeCts.Token);
+
+            if (HandleFailure(result))
+                return;
+
+            var roleName = _roles.FirstOrDefault(r =>
+                string.Equals(r.RoleId, _selectedRoleId, StringComparison.OrdinalIgnoreCase))?.RoleName
+                ?? _selectedRoleId;
+            _message = $"角色 {roleName} 的功能權限已儲存。";
+            _isError = false;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool HandleFailure<T>(ApiResult<T> result)
+    {
+        if (result.Succeeded)
+            return false;
+
+        ShowError(result.ErrorMessage);
+        if (result.IsUnauthorized)
+            Navigation.NavigateTo("/login?returnUrl=/system/roles", replace: true);
+        return true;
+    }
+
+    private void ShowError(string? message)
+    {
+        _isError = true;
+        _message = string.IsNullOrWhiteSpace(message) ? "操作失敗。" : message;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _isError = false;
+    }
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}
+

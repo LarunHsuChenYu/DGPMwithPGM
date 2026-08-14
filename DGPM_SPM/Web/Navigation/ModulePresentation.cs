@@ -12,7 +12,7 @@ public static class ModulePresentation
             "Syslog" => ("查", "#475569", "KPI 異動、匯入紀錄與登入歷程查詢"),
             "Dashboard" => ("儀", "#dc2626", "經銷商績效總覽儀錶板"),
             /* 殘留／已退役模組 Fun_ID 仍可能出現在舊 session */
-            "Permission" => ("權", "#7c3aed", "已退役；帳號與角色請至 PGM"),
+            "Permission" => ("權", "#1d4ed8", "系統管理權限（PgmUiMode=Off 時可用）"),
             _ => (
                 string.IsNullOrWhiteSpace(functionId) ? "模" : functionId[..1].ToUpperInvariant(),
                 "#64748b",

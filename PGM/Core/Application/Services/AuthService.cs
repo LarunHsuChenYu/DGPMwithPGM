@@ -5,6 +5,7 @@ using PGM.Core.Application.Models.Auth;
 using PGM.Core.Application.Models.Enums;
 using PGM.Core.Application.Models.UserManagement;
 using PGM.Core.Common.Attributes;
+using PGM.Core.Common.Auth;
 using PGM.Core.Common.Extensions;
 using PGM.Core.Common.Security;
 using PGM.Core.Domain.Entities;
@@ -25,19 +26,22 @@ public class AuthService : IAuthService
     private readonly ICurrentUser _currentUser;
     private readonly IRequestContext _requestContext;
     private readonly IAuthMapper _authMapper;
+    private readonly IPgmUiModeService _uiMode;
 
     public AuthService(
         IUnitOfWork unitOfWork,
         ITokenService tokenService,
         ICurrentUser currentUser,
         IRequestContext requestContext,
-        IAuthMapper authMapper)
+        IAuthMapper authMapper,
+        IPgmUiModeService uiMode)
     {
         _unitOfWork = unitOfWork;
         _tokenService = tokenService;
         _currentUser = currentUser;
         _requestContext = requestContext;
         _authMapper = authMapper;
+        _uiMode = uiMode;
     }
 
     public async Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request, CancellationToken ct = default)
@@ -429,15 +433,85 @@ public class AuthService : IAuthService
         string? systemCode,
         CancellationToken ct)
     {
-        var menuEntities = (await _unitOfWork.Menus.GetMenuByRoleIdAsync(
-                roleId,
-                NormalizeSystemCode(systemCode),
-                ct))
+        var normalized = NormalizeSystemCode(systemCode);
+        var mode = await _uiMode.GetModeValueAsync(ct);
+
+        var menuEntities = (await _unitOfWork.Menus.GetMenuByRoleIdAsync(roleId, normalized, ct))
             .OrderBy(m => m.SortOrder)
             .ThenBy(m => m.FunId)
             .ToList();
 
-        return _authMapper.ToMenuDtos(menuEntities).ToList();
+        var menus = _authMapper.ToMenuDtos(menuEntities).ToList();
+
+        if (string.Equals(normalized, "PGM", StringComparison.OrdinalIgnoreCase)
+            && PgmUiMode.IsOff(mode))
+        {
+            // Mode=Off：PGM Web 隱藏系統權限選單（API 讀取仍可由閘道允許唯讀）
+            menus = menus
+                .Where(m => !PgmUiMode.IsAuthFunctionId(m.FunctionId))
+                .ToList();
+            return menus;
+        }
+
+        if (string.Equals(normalized, "DGPM", StringComparison.OrdinalIgnoreCase)
+            && PgmUiMode.IsOn(mode))
+        {
+            // Mode=On：DGPM 不顯示系統管理權限（即使 MAP 有 AUTH）
+            menus = menus
+                .Where(m => !PgmUiMode.IsAuthFunctionId(m.FunctionId)
+                            && !string.Equals(m.FunctionId, PgmUiMode.DgpmAuthParentId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return menus;
+        }
+
+        if (string.Equals(normalized, "DGPM", StringComparison.OrdinalIgnoreCase)
+            && PgmUiMode.IsOff(mode))
+        {
+            // Mode=Off：把 MAP 到的 AUTH*（SYSTEM_CODE=PGM）併入 DGPM 選單，掛在「系統管理權限」下
+            var authEntities = (await _unitOfWork.Menus.GetMenuByRoleIdAsync(roleId, "PGM", ct))
+                .Where(m => PgmUiMode.IsAuthFunctionId(m.FunId)
+                            && string.Equals(m.IsMenu, "Y", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(m.FunId, "AUTH05", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(m.FunId, "AUTH09", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (authEntities.Count == 0)
+                return menus;
+
+            menus.RemoveAll(m =>
+                PgmUiMode.IsAuthFunctionId(m.FunctionId)
+                || string.Equals(m.FunctionId, PgmUiMode.DgpmAuthParentId, StringComparison.OrdinalIgnoreCase));
+
+            menus.Add(new MenuDto
+            {
+                FunctionId = PgmUiMode.DgpmAuthParentId,
+                FunctionName = PgmUiMode.DgpmAuthParentName,
+                ParentId = null,
+                FunctionUrl = null,
+                SortId = 200
+            });
+
+            foreach (var leaf in authEntities.OrderBy(m => m.SortOrder).ThenBy(m => m.FunId))
+            {
+                var url = PgmUiMode.ResolveDgpmAuthUrl(leaf.FunId) ?? leaf.UrlPath;
+                if (string.IsNullOrWhiteSpace(url))
+                    continue;
+
+                menus.Add(new MenuDto
+                {
+                    FunctionId = leaf.FunId,
+                    FunctionName = leaf.FunName,
+                    ParentId = PgmUiMode.DgpmAuthParentId,
+                    FunctionUrl = url,
+                    SortId = leaf.SortOrder
+                });
+            }
+        }
+
+        return menus
+            .OrderBy(m => m.SortId)
+            .ThenBy(m => m.FunctionId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static Role SelectRole(IReadOnlyList<Role> roles, string? requestedRoleId)

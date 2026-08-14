@@ -1,5 +1,6 @@
 using PGM.Core.Application.Models;
 using PGM.Core.Application.Models.Api.Response;
+using PGM.Core.Application.Models.Auth;
 using PGM.Core.Application.Models.UserManagement;
 using PGM.Core.Application.Queries;
 
@@ -22,5 +23,11 @@ public interface IUserAccountService
     Task<ApiResponse<bool>> UpdateStatusAsync(
         string userId,
         UserAccountStatusRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>管理員代他人重設密碼（AUTH09）；預設重設為 0000。</summary>
+    Task<ApiResponse<object>> AdminResetPasswordAsync(
+        string userId,
+        AdminResetPasswordRequest request,
         CancellationToken ct = default);
 }

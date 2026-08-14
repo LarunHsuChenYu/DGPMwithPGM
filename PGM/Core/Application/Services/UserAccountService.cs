@@ -1,6 +1,7 @@
 using PGM.Core.Application.Interfaces;
 using PGM.Core.Application.Models;
 using PGM.Core.Application.Models.Api.Response;
+using PGM.Core.Application.Models.Auth;
 using PGM.Core.Application.Models.Enums;
 using PGM.Core.Application.Models.UserManagement;
 using PGM.Core.Application.Queries;
@@ -177,6 +178,43 @@ public class UserAccountService : IUserAccountService
             async token => affected = await _unitOfWork.Users.UpdateStatusAsync(existing, token),
             ct);
         return Success(affected > 0);
+    }
+
+    public async Task<ApiResponse<object>> AdminResetPasswordAsync(
+        string userId,
+        AdminResetPasswordRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return Invalid<object>("使用者帳號不可為空白。");
+
+        var targetId = userId.Trim();
+        var entity = await _unitOfWork.Users.GetForManagementAsync(targetId, ct);
+        if (entity is null || entity.DelFlg == true)
+        {
+            return ApiResponse<object>.ErrorResult(
+                ErrorCodes.DataNotFound.GetDescription("code"),
+                "找不到指定使用者。",
+                _requestContext.TraceId);
+        }
+
+        var plain = string.IsNullOrWhiteSpace(request.NewPassword)
+            ? DefaultPassword.Value
+            : request.NewPassword.Trim();
+
+        if (plain.Length < 4 || plain.Length > 50)
+            return Invalid<object>("新密碼長度須為 4～50 字元。");
+
+        var hash = BCrypt.Net.BCrypt.HashPassword(plain);
+        var auditUser = GetAuditUser();
+        var now = DateTime.Now;
+
+        await ExecuteWriteAsync(
+            async token => await _unitOfWork.Users.UpdatePasswordAsync(
+                targetId, hash, auditUser, now, token),
+            ct);
+
+        return Success<object>(new { userId = targetId, resetToDefault = DefaultPassword.IsDefaultPlain(plain) });
     }
 
     private async Task<string?> ValidateRolesAsync(

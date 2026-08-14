@@ -27,6 +27,20 @@
                             }
                         </select>
                     </div>
+                    @if (_canToggleUiMode)
+                    {
+                        <div class="role-switch">
+                            <label class="role-label" for="header-ui-mode">權限UI:</label>
+                            <select id="header-ui-mode"
+                                    class="role-select"
+                                    disabled="@(_switchingUiMode || _loggingOut)"
+                                    value="@_uiMode"
+                                    @onchange="OnUiModeChangedAsync">
+                                <option value="On">PGM（On）</option>
+                                <option value="Off">DGPM（Off）</option>
+                            </select>
+                        </div>
+                    }
                     <button type="button" class="btn btn-outline-secondary btn-sm logout-btn"
                             disabled="@_loggingOut" @onclick="LogoutAsync">
                         @(_loggingOut ? "登出中…" : "登出")
@@ -50,6 +64,9 @@
 @code {
     private bool _loggingOut;
     private bool _switchingRole;
+    private bool _switchingUiMode;
+    private bool _canToggleUiMode;
+    private string _uiMode = "On";
     private string _selectedRoleId = string.Empty;
     private string _menuRefreshKey = Guid.NewGuid().ToString("N");
     private List<RoleOption> _roles = [];
@@ -59,6 +76,52 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadRoleOptionsAsync();
+        await LoadUiModeAsync();
+    }
+
+    private async Task LoadUiModeAsync()
+    {
+        var result = await ApiClient.GetPgmUiModeAsync();
+        if (result.Succeeded && result.Data is not null)
+        {
+            _uiMode = string.Equals(result.Data.Mode, "Off", StringComparison.OrdinalIgnoreCase) ? "Off" : "On";
+            _canToggleUiMode = result.Data.CanEdit;
+        }
+        else
+        {
+            var session = await TokenStore.GetAsync();
+            var roleId = ExtractRoleId(session?.User.RoleId);
+            _canToggleUiMode = string.Equals(roleId, "PGMAdmin", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(roleId, "ADMIN", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private async Task OnUiModeChangedAsync(ChangeEventArgs e)
+    {
+        var next = e.Value?.ToString() ?? "On";
+        if (string.Equals(next, _uiMode, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var previous = _uiMode;
+        _uiMode = next;
+        _switchingUiMode = true;
+        try
+        {
+            var result = await ApiClient.SetPgmUiModeAsync(next);
+            if (!result.Succeeded || result.Data is null)
+            {
+                _uiMode = previous;
+                return;
+            }
+
+            _uiMode = string.Equals(result.Data.Mode, "Off", StringComparison.OrdinalIgnoreCase) ? "Off" : "On";
+            _menuRefreshKey = Guid.NewGuid().ToString("N");
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _switchingUiMode = false;
+        }
     }
 
     private async Task LoadRoleOptionsAsync()

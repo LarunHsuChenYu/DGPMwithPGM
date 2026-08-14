@@ -1,0 +1,213 @@
+﻿@page "/system/role-master"
+@implements IDisposable
+@inject SpmApiClient ApiClient
+
+<PageTitle>角色主檔 - DGPM</PageTitle>
+
+<PageBreadcrumb Module="系統管理權限" Current="角色主檔" />
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <h1 class="page-title mb-0">角色主檔</h1>
+    <button type="button" class="btn btn-primary btn-sm" disabled="@_loading" @onclick="BeginCreate">新增角色</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success") py-2" role="alert">@_message</div>
+}
+
+<section class="panel mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" for="kw">關鍵字</label>
+            <input id="kw" class="form-control" @bind="_keyword" />
+        </div>
+        <div class="col-md-auto">
+            <button type="button" class="btn btn-outline-secondary" @onclick="SearchAsync" disabled="@_loading">查詢</button>
+        </div>
+    </div>
+</section>
+
+<section class="card mb-3">
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>角色代碼</th>
+                    <th>角色名稱</th>
+                    <th>系統</th>
+                    <th>狀態</th>
+                    <th style="width:10rem">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="5" class="text-center text-secondary">載入中…</td></tr>
+                }
+                else if (_roles.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-center text-secondary">無資料</td></tr>
+                }
+                else
+                {
+                    @foreach (var r in _roles)
+                    {
+                        <tr>
+                            <td>@r.RoleId</td>
+                            <td>@r.RoleName</td>
+                            <td>@r.SystemCode</td>
+                            <td>@(r.DelFlg ? "停用" : "啟用")</td>
+                            <td>
+                                <button type="button" class="btn btn-link btn-sm p-0 me-2" @onclick="() => BeginEdit(r)">編輯</button>
+                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => ToggleStatusAsync(r)">
+                                    @(r.DelFlg ? "啟用" : "停用")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@if (_editing)
+{
+    <section class="panel">
+        <h2 class="h5">@(_isNew ? "新增角色" : "編輯角色")</h2>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">角色代碼</label>
+                <input class="form-control" @bind="_form.RoleId" disabled="@(!_isNew)" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">角色名稱</label>
+                <input class="form-control" @bind="_form.RoleName" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">系統代碼</label>
+                <select class="form-select" @bind="_form.SystemCode">
+                    <option value="PGM">PGM</option>
+                    <option value="DGPM">DGPM</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="button" class="btn btn-primary me-2" disabled="@_saving" @onclick="SaveAsync">儲存</button>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_saving" @onclick="CancelEdit">取消</button>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private List<RoleDto> _roles = [];
+    private string? _keyword;
+    private string? _message;
+    private bool _isError;
+    private bool _loading;
+    private bool _saving;
+    private bool _editing;
+    private bool _isNew;
+    private SaveRoleRequest _form = new();
+
+    protected override async Task OnInitializedAsync() => await SearchAsync();
+
+    private async Task SearchAsync()
+    {
+        _loading = true;
+        _message = null;
+        try
+        {
+            var result = await ApiClient.GetRolesAsync(_keyword, isActive: null, page: 1, pageSize: 200, _cts.Token);
+            if (!result.Succeeded || result.Data is null)
+            {
+                _isError = true;
+                _message = result.ErrorMessage ?? "載入失敗";
+                _roles = [];
+                return;
+            }
+
+            _roles = result.Data.Datas?.ToList() ?? [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BeginCreate()
+    {
+        _isNew = true;
+        _editing = true;
+        _form = new SaveRoleRequest { SystemCode = "PGM" };
+        _message = null;
+    }
+
+    private void BeginEdit(RoleDto role)
+    {
+        _isNew = false;
+        _editing = true;
+        _form = new SaveRoleRequest
+        {
+            RoleId = role.RoleId,
+            RoleName = role.RoleName,
+            RoleType = role.RoleType,
+            SystemCode = string.IsNullOrWhiteSpace(role.SystemCode) ? "PGM" : role.SystemCode
+        };
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _form = new();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        try
+        {
+            var result = _isNew
+                ? await ApiClient.CreateRoleAsync(_form, _cts.Token)
+                : await ApiClient.UpdateRoleAsync(_form.RoleId, _form, _cts.Token);
+
+            if (!result.Succeeded)
+            {
+                _isError = true;
+                _message = result.ErrorMessage ?? "儲存失敗";
+                return;
+            }
+
+            _isError = false;
+            _message = "已儲存";
+            _editing = false;
+            await SearchAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(RoleDto role)
+    {
+        var result = await ApiClient.SetRoleStatusAsync(role.RoleId, isActive: role.DelFlg, _cts.Token);
+        if (!result.Succeeded)
+        {
+            _isError = true;
+            _message = result.ErrorMessage ?? "狀態更新失敗";
+            return;
+        }
+
+        _isError = false;
+        _message = "狀態已更新";
+        await SearchAsync();
+    }
+
+    public void Dispose() => _cts.Cancel();
+}
+

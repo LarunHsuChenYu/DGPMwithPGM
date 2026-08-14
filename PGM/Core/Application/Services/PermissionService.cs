@@ -60,8 +60,7 @@ public class PermissionService : IPermissionService
         if (string.IsNullOrWhiteSpace(roleId))
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        return (await _unitOfWork.Menus.GetMenuByRoleIdAsync(roleId, _currentUser.SystemCode, ct))
-            .Select(item => item.FunId)
+        return (await _unitOfWork.Roles.GetGrantedFunctionIdsAsync(roleId, ct))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 

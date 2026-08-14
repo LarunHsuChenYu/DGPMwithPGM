@@ -2,10 +2,11 @@
 @inject SpmApiClient ApiClient
 @inject SpmAuthenticationStateProvider AuthProvider
 @inject NavigationManager Navigation
+@inject AuthTokenStore TokenStore
 
 <div class="page">
     <div class="sidebar">
-        <NavMenu />
+        <NavMenu @key="_menuRefreshKey" />
     </div>
 
     <main>
@@ -13,6 +14,21 @@
             <AuthorizeView>
                 <Authorized>
                     <span class="user-name" title="目前登入使用者">@context.User.Identity?.Name</span>
+                    @if (_canToggleUiMode)
+                    {
+                        <div class="d-inline-flex align-items-center gap-1 ms-3">
+                            <label class="form-label mb-0 small" for="header-ui-mode">權限UI</label>
+                            <select id="header-ui-mode"
+                                    class="form-select form-select-sm"
+                                    style="width:auto"
+                                    disabled="@(_switchingUiMode || _loggingOut)"
+                                    value="@_uiMode"
+                                    @onchange="OnUiModeChangedAsync">
+                                <option value="On">PGM（On）</option>
+                                <option value="Off">DGPM（Off）</option>
+                            </select>
+                        </div>
+                    }
                     <button type="button" class="btn btn-outline-secondary btn-sm logout-btn"
                             disabled="@_loggingOut" @onclick="LogoutAsync">
                         @(_loggingOut ? "登出中…" : "登出")
@@ -35,13 +51,59 @@
 
 @code {
     private bool _loggingOut;
+    private bool _switchingUiMode;
+    private bool _canToggleUiMode;
+    private string _uiMode = "On";
+    private string _menuRefreshKey = Guid.NewGuid().ToString("N");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUiModeAsync();
+    }
+
+    private async Task LoadUiModeAsync()
+    {
+        var result = await ApiClient.GetPgmUiModeAsync();
+        if (result.Succeeded && result.Data is not null)
+        {
+            _uiMode = string.Equals(result.Data.Mode, "Off", StringComparison.OrdinalIgnoreCase) ? "Off" : "On";
+            _canToggleUiMode = result.Data.CanEdit;
+        }
+    }
+
+    private async Task OnUiModeChangedAsync(ChangeEventArgs e)
+    {
+        var next = e.Value?.ToString() ?? "On";
+        if (string.Equals(next, _uiMode, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var previous = _uiMode;
+        _uiMode = next;
+        _switchingUiMode = true;
+        try
+        {
+            var result = await ApiClient.SetPgmUiModeAsync(next);
+            if (!result.Succeeded || result.Data is null)
+            {
+                _uiMode = previous;
+                return;
+            }
+
+            _uiMode = string.Equals(result.Data.Mode, "Off", StringComparison.OrdinalIgnoreCase) ? "Off" : "On";
+            _menuRefreshKey = Guid.NewGuid().ToString("N");
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _switchingUiMode = false;
+        }
+    }
 
     private async Task LogoutAsync()
     {
         _loggingOut = true;
         try
         {
-            // 通知後端更新登出紀錄；即使失敗（連線問題等）仍完成前端登出。
             await ApiClient.LogoutAsync();
         }
         finally

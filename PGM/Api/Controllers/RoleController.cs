@@ -3,6 +3,7 @@ using PGM.Core.Application.Models;
 using PGM.Core.Application.Models.Api.Response;
 using PGM.Core.Application.Models.RoleManagement;
 using PGM.Core.Application.Queries;
+using PGM.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,7 @@ namespace PGM.Api.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 [ApiController]
 [Route("api/system/roles")]
+[RequireAuthFunction("AUTH02", "AUTH07")]
 public class RoleController : ControllerBase
 {
     private readonly IRoleService _roleService;

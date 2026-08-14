@@ -235,6 +235,23 @@ public class PgmApiClient
             new UserAccountStatusRequest { IsActive = isActive },
             ct);
 
+    public Task<ApiResult<object>> AdminResetPasswordAsync(
+        string userId,
+        string? newPassword = null,
+        CancellationToken ct = default)
+        => PutAsync<object>(
+            $"api/system/users/{Uri.EscapeDataString(userId)}/reset-password",
+            new { newPassword },
+            ct);
+
+    // ---------- PgmUiMode ----------
+
+    public Task<ApiResult<PgmUiModeDto>> GetPgmUiModeAsync(CancellationToken ct = default)
+        => GetAsync<PgmUiModeDto>("api/system/ui-mode", ct);
+
+    public Task<ApiResult<PgmUiModeDto>> SetPgmUiModeAsync(string mode, CancellationToken ct = default)
+        => PutAsync<PgmUiModeDto>("api/system/ui-mode", new { mode }, ct);
+
     // ---------- Role API（角色與權限管理）----------
 
     public Task<ApiResult<PagedResult<RoleDto>>> GetRolesAsync(

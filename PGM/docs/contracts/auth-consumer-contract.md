@@ -1,7 +1,7 @@
 # Auth Consumer Contract（PGM → DGPM）
 
 > 帳號／登入／JWT／選單真相來源＝**PGM**。DGPM（`AuthMode=PGM`）必須依本文件實作，不得自創 Claim 名稱或錯誤碼語意。  
-> 測試機 Api：`http://localhost:9528`（健康檢查：`GET /api/health`）。
+> 健康檢查：`GET /api/health`（本機預設 `http://localhost:9528`；實際 host 見環境變數／User Secrets）。
 
 ## 1. JWT（共用簽章，以 PGM 為主）
 
@@ -77,10 +77,21 @@
 |---|---|---|
 | POST | `/api/auth/logout` | Bearer；更新登入紀錄 |
 | GET | `/api/auth/me` | Bearer；使用者資訊（含停用檢核） |
-| GET | `/api/auth/menus` | Bearer；依 JWT `rid`＋`sys` 回選單 |
+| GET | `/api/auth/menus` | Bearer；依 JWT `rid`＋`sys`＋**PgmUiMode** 回選單 |
 | POST | `/api/auth/switch-role` | Bearer；body含 `roleId`；重簽 JWT |
 | POST | `/api/auth/change-password` | Bearer 或依現行強制改密流程 |
-| GET | `/api/system/authentication-logs`（或現行 LoginHistory API） | 登入紀錄**只在 PGM**；DGPM 聯調可呼叫此 API 或開 PGM Web |
+| GET/PUT | `/api/system/ui-mode` | PgmUiMode（`On`｜`Off`）；寫入僅帳號掛 **PGMAdmin** |
+| PUT | `/api/system/users/{userId}/reset-password` | AUTH09 代重設密碼（預設 0000） |
+
+### PgmUiMode（系統權限 UI）
+
+| SET_PARAM | 值 |
+|---|---|
+| `SET_ITEM` | `Auth` |
+| `SET_ID` | `PgmUiMode` |
+| `SET_VALUE` | `On`＝UI 在 PGM；`Off`＝UI 在 DGPM（轉發本平台 AUTH API） |
+
+與 `AllowPGMLoginEntry` **獨立**。Mode=Off 時 `sys=DGPM`＋MAP 含對應 AUTH Fun 可維護；Mode=On 時僅 `sys=PGM`。
 
 ## 4. 選單父層規則
 
@@ -92,17 +103,18 @@
 
 ```json
 "Auth": {
-  "AuthMode": "Local|PGM",
   "AllowPGMLoginEntry": true,
-  "PgmBaseUrl": "http://localhost:9528",
+  "PgmBaseUrl": "https://localhost:0",
+  "PgmWebBaseUrl": "https://localhost:0",
   "SystemCode": "DGPM"
 }
 ```
 
-| AuthMode | AllowPGMLoginEntry | 行為 |
-|---|---|---|
-| Local | * | DGPM 本地 Auth（開發過渡） |
-| PGM | true | DGPM 登入頁呼叫本契約 API |
-| PGM | false | 拒絕由業務系統登入 |
+| AllowPGMLoginEntry | 行為 |
+|---|---|
+| true | DGPM 登入頁呼叫本契約 API |
+| false | 拒絕由業務系統登入 |
 
-PGM 不可達 → DGPM **不可完成登入**。
+> Local Auth 已退役。系統權限 UI 所在端見上方 **PgmUiMode**（非此部署鍵）。
+
+PGM 不可達 → DGPM **不可完成登入**；Mode=Off 時 AUTH 維護亦不可寫本地。

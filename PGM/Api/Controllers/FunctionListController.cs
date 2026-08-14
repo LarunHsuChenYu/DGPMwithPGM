@@ -3,6 +3,7 @@ using PGM.Core.Application.Models.Functions;
 using PGM.Core.Application.Models;
 using PGM.Core.Application.Models.Api.Response;
 using PGM.Core.Application.Queries;
+using PGM.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ namespace PGM.Api.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 [ApiController]
 [Route("api/permission/function-list")]
+[RequireAuthFunction("AUTH06")]
 public class FunctionListController : ControllerBase
 {
     private readonly IFunctionService _functionService;

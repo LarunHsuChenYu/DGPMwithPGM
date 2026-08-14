@@ -65,7 +65,7 @@ ORDER BY A.PARENT_NAME, A.SORT_ID;
 開發種子功能代碼（`90_dev_seed_admin.sql`）：
 - PGM：`AUTH01`～`AUTH08`（帳號／角色／改密／代碼／報表／功能／角色主檔／登入紀錄）
 - DGPM：業務模組葉（`RoleKPIList` 父層＝`KPIIndicator`）；`PgmAuthLink`／`Permission` 軟刪、不授權給 DGPM*
-- **跨系統**：`Admin` 掛 `DGPMAdmin` → 完整業務選單；系統權限平台在 PGM；舊 `ADMIN` 軟刪
+- **跨系統**：`Admin` 與 `AshtonHsu` 皆掛 `PGMAdmin`＋`DGPMAdmin`（系統權限同等；AshtonHsu 另含 Uploader／Reviewer）；舊 `ADMIN` 軟刪
 
 ## 其他表
 

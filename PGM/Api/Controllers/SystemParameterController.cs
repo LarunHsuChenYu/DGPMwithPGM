@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PGM.Api.Infrastructure;
 using PGM.Core.Application.Interfaces;
 using PGM.Core.Application.Models.Api.Response;
 using PGM.Core.Application.Models.Parameter;
@@ -11,6 +12,7 @@ namespace PGM.Api.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 [ApiController]
 [Route("api/system/parameters")]
+[RequireAuthFunction("AUTH04")]
 public class SystemParameterController : ControllerBase
 {
     private readonly IParameterService _parameterService;

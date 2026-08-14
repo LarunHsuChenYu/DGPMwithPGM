@@ -1,11 +1,11 @@
-@page "/system/users"
+﻿@page "/system/users"
 @implements IDisposable
-@inject PgmApiClient ApiClient
+@inject SpmApiClient ApiClient
 @inject NavigationManager Navigation
 
-<PageTitle>使用者帳號維護 - PGM</PageTitle>
+<PageTitle>使用者帳號維護 - DGPM</PageTitle>
 
-<PageBreadcrumb Module="系統管理" Current="使用者帳號維護" />
+<PageBreadcrumb Module="系統管理權限" Current="使用者帳號維護" />
 
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
     <h1 class="page-title mb-0">使用者帳號維護</h1>
@@ -363,3 +363,4 @@
         _disposeCts.Dispose();
     }
 }
+

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace DGPM_SPM.Infrastructure.Auth;
 
-/// <summary>將 Auth API 轉發至 PGM（DGPM 唯一 Auth 路徑）。</summary>
+/// <summary>將 Auth／系統權限 API 轉發至 PGM（DGPM 唯一 Auth 路徑；不寫本地 Auth DB）。</summary>
 public class PgmAuthClient : IPgmAuthClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -70,6 +70,19 @@ public class PgmAuthClient : IPgmAuthClient
     public Task<ApiResponse<object>> ChangePasswordAsync(ChangePasswordRequest request, CancellationToken ct = default)
         => SendAsync<object>(
             HttpMethod.Post, "api/auth/change-password", request, stripAuthorization: false, ct);
+
+    public Task<ApiResponse<PgmUiModeDto>> GetUiModeAsync(CancellationToken ct = default)
+        => SendAsync<PgmUiModeDto>(HttpMethod.Get, "api/system/ui-mode", body: null, stripAuthorization: false, ct);
+
+    public Task<ApiResponse<PgmUiModeDto>> SetUiModeAsync(UpdatePgmUiModeRequest request, CancellationToken ct = default)
+        => SendAsync<PgmUiModeDto>(HttpMethod.Put, "api/system/ui-mode", request, stripAuthorization: false, ct);
+
+    public Task<ApiResponse<T>> ForwardAsync<T>(
+        HttpMethod method,
+        string relativePath,
+        object? body = null,
+        CancellationToken ct = default)
+        => SendAsync<T>(method, relativePath.TrimStart('/'), body, stripAuthorization: false, ct);
 
     private async Task<ApiResponse<T>> SendAsync<T>(
         HttpMethod method,

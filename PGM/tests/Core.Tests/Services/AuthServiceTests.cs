@@ -21,6 +21,7 @@ public class AuthServiceTests
     private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
     private readonly IRequestContext _requestContext = Substitute.For<IRequestContext>();
+    private readonly IPgmUiModeService _uiMode = Substitute.For<IPgmUiModeService>();
     private readonly IAuthMapper _authMapper = new AuthMapper();
     private readonly AuthService _sut;
 
@@ -31,13 +32,16 @@ public class AuthServiceTests
         _uow.Menus.Returns(_menuRepo);
         _uow.AuthenticationLogs.Returns(_authLogRepo);
         _requestContext.TraceId.Returns("test-trace");
+        _uiMode.GetModeValueAsync(Arg.Any<CancellationToken>())
+            .Returns(PGM.Core.Common.Auth.PgmUiMode.On);
 
         _sut = new AuthService(
             _uow,
             _tokenService,
             _currentUser,
             _requestContext,
-            _authMapper);
+            _authMapper,
+            _uiMode);
     }
 
     [Fact]

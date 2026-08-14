@@ -260,6 +260,131 @@ public class SpmApiClient
         return GetAsync<PagedResult<KpiChangeLogDto>>($"api/query/kpi-changes?{string.Join('&', query)}", ct);
     }
 
+    // ---------- System Auth（轉發 PGM；PgmUiMode=Off）----------
+
+    public Task<ApiResult<object>> ChangePasswordAsync(ChangePasswordRequest request, CancellationToken ct = default)
+        => PostAsync<object>("api/auth/change-password", request, ct);
+
+    public Task<ApiResult<PgmUiModeDto>> GetPgmUiModeAsync(CancellationToken ct = default)
+        => GetAsync<PgmUiModeDto>("api/system/ui-mode", ct);
+
+    public Task<ApiResult<PgmUiModeDto>> SetPgmUiModeAsync(string mode, CancellationToken ct = default)
+        => PutAsync<PgmUiModeDto>("api/system/ui-mode", new { mode }, ct);
+
+    public Task<ApiResult<PagedResult<UserAccountDto>>> GetUserAccountsAsync(
+        string? keyword, bool? isActive, string? roleId, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        AddQuery(query, "keyword", keyword);
+        AddQuery(query, "isActive", isActive?.ToString().ToLowerInvariant());
+        AddQuery(query, "roleId", roleId);
+        return GetAsync<PagedResult<UserAccountDto>>($"api/system/users?{string.Join('&', query)}", ct);
+    }
+
+    public Task<ApiResult<UserAccountDto>> GetUserAccountAsync(string userId, CancellationToken ct = default)
+        => GetAsync<UserAccountDto>($"api/system/users/{Uri.EscapeDataString(userId)}", ct);
+
+    public Task<ApiResult<IReadOnlyList<RoleOptionDto>>> GetUserRoleOptionsAsync(CancellationToken ct = default)
+        => GetAsync<IReadOnlyList<RoleOptionDto>>("api/system/users/role-options", ct);
+
+    public Task<ApiResult<UserAccountDto>> CreateUserAccountAsync(CreateUserAccountRequest request, CancellationToken ct = default)
+        => PostAsync<UserAccountDto>("api/system/users", request, ct);
+
+    public Task<ApiResult<UserAccountDto>> UpdateUserAccountAsync(string userId, UpdateUserAccountRequest request, CancellationToken ct = default)
+        => PutAsync<UserAccountDto>($"api/system/users/{Uri.EscapeDataString(userId)}", request, ct);
+
+    public Task<ApiResult<bool>> SetUserAccountStatusAsync(string userId, bool isActive, CancellationToken ct = default)
+        => PutAsync<bool>($"api/system/users/{Uri.EscapeDataString(userId)}/status", new UserAccountStatusRequest { IsActive = isActive }, ct);
+
+    public Task<ApiResult<object>> AdminResetPasswordAsync(string userId, string? newPassword = null, CancellationToken ct = default)
+        => PutAsync<object>($"api/system/users/{Uri.EscapeDataString(userId)}/reset-password", new { newPassword }, ct);
+
+    public Task<ApiResult<PagedResult<RoleDto>>> GetRolesAsync(string? keyword, bool? isActive, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        AddQuery(query, "keyword", keyword);
+        AddQuery(query, "isActive", isActive?.ToString().ToLowerInvariant());
+        return GetAsync<PagedResult<RoleDto>>($"api/system/roles?{string.Join('&', query)}", ct);
+    }
+
+    public Task<ApiResult<RoleDto>> CreateRoleAsync(SaveRoleRequest request, CancellationToken ct = default)
+        => PostAsync<RoleDto>("api/system/roles", request, ct);
+
+    public Task<ApiResult<RoleDto>> UpdateRoleAsync(string roleId, SaveRoleRequest request, CancellationToken ct = default)
+        => PutAsync<RoleDto>($"api/system/roles/{Uri.EscapeDataString(roleId)}", request, ct);
+
+    public Task<ApiResult<bool>> SetRoleStatusAsync(string roleId, bool isActive, CancellationToken ct = default)
+        => PutAsync<bool>($"api/system/roles/{Uri.EscapeDataString(roleId)}/status", new RoleStatusRequest { IsActive = isActive }, ct);
+
+    public Task<ApiResult<RolePermissionsDto>> GetRolePermissionsAsync(string roleId, CancellationToken ct = default)
+        => GetAsync<RolePermissionsDto>($"api/system/roles/{Uri.EscapeDataString(roleId)}/permissions", ct);
+
+    public Task<ApiResult<bool>> SaveRolePermissionsAsync(string roleId, SaveRolePermissionsRequest request, CancellationToken ct = default)
+        => PutAsync<bool>($"api/system/roles/{Uri.EscapeDataString(roleId)}/permissions", request, ct);
+
+    public Task<ApiResult<PagedResult<AuthenticationLogDto>>> GetLoginHistoryAsync(
+        string? keyword, DateTime? loginDateFrom, DateTime? loginDateTo, string? authStatus,
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        AddQuery(query, "keyword", keyword);
+        AddQuery(query, "loginDateFrom", loginDateFrom?.ToString("yyyy-MM-dd"));
+        AddQuery(query, "loginDateTo", loginDateTo?.ToString("yyyy-MM-dd"));
+        AddQuery(query, "authStatus", authStatus);
+        return GetAsync<PagedResult<AuthenticationLogDto>>($"api/query/login-history?{string.Join('&', query)}", ct);
+    }
+
+    public Task<ApiResult<PagedResult<FunctionDto>>> GetFunctionListAsync(
+        string? keyword, string? parentId, string? actionType, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        AddQuery(query, "keyword", keyword);
+        AddQuery(query, "parentId", parentId);
+        AddQuery(query, "actionType", actionType);
+        return GetAsync<PagedResult<FunctionDto>>($"api/permission/function-list?{string.Join('&', query)}", ct);
+    }
+
+    public Task<ApiResult<List<FunctionOptionDto>>> GetFunctionParentOptionsAsync(CancellationToken ct = default)
+        => GetAsync<List<FunctionOptionDto>>("api/permission/function-list/parent-options", ct);
+
+    public Task<ApiResult<List<FunctionOptionDto>>> GetFunctionOptionsAsync(string? excludeFunId, CancellationToken ct = default)
+    {
+        var url = "api/permission/function-list/options";
+        if (!string.IsNullOrWhiteSpace(excludeFunId))
+            url += $"?excludeFunId={Uri.EscapeDataString(excludeFunId)}";
+        return GetAsync<List<FunctionOptionDto>>(url, ct);
+    }
+
+    public Task<ApiResult<FunctionDto>> CreateFunctionAsync(SaveFunctionRequest request, CancellationToken ct = default)
+        => PostAsync<FunctionDto>("api/permission/function-list", request, ct);
+
+    public Task<ApiResult<FunctionDto>> UpdateFunctionAsync(string funId, SaveFunctionRequest request, CancellationToken ct = default)
+        => PutAsync<FunctionDto>($"api/permission/function-list/{Uri.EscapeDataString(funId)}", request, ct);
+
+    public Task<ApiResult<bool>> CanDeleteFunctionAsync(string funId, CancellationToken ct = default)
+        => GetAsync<bool>($"api/permission/function-list/{Uri.EscapeDataString(funId)}/can-delete", ct);
+
+    public Task<ApiResult<bool>> DeleteFunctionAsync(string funId, CancellationToken ct = default)
+        => DeleteAsync<bool>($"api/permission/function-list/{Uri.EscapeDataString(funId)}", ct);
+
+    public Task<ApiResult<IReadOnlyList<ParameterCategoryDto>>> GetParameterCategoriesAsync(CancellationToken ct = default)
+        => GetAsync<IReadOnlyList<ParameterCategoryDto>>("api/system/parameters/categories", ct);
+
+    public Task<ApiResult<IReadOnlyList<ParameterDto>>> GetParametersByCategoryAsync(string setItem, CancellationToken ct = default)
+        => GetAsync<IReadOnlyList<ParameterDto>>($"api/system/parameters/{Uri.EscapeDataString(setItem)}", ct);
+
+    public Task<ApiResult<int>> GetParameterNextSortOrderAsync(string setItem, CancellationToken ct = default)
+        => GetAsync<int>($"api/system/parameters/{Uri.EscapeDataString(setItem)}/next-sort-order", ct);
+
+    public Task<ApiResult<ParameterDto>> CreateParameterAsync(CreateParameterRequest request, CancellationToken ct = default)
+        => PostAsync<ParameterDto>("api/system/parameters", request, ct);
+
+    public Task<ApiResult<ParameterDto>> UpdateParameterAsync(string setItem, string setId, UpdateParameterRequest request, CancellationToken ct = default)
+        => PutAsync<ParameterDto>($"api/system/parameters/{Uri.EscapeDataString(setItem)}/{Uri.EscapeDataString(setId)}", request, ct);
+
+    public Task<ApiResult<bool>> DeleteParameterAsync(string setItem, string setId, CancellationToken ct = default)
+        => DeleteAsync<bool>($"api/system/parameters/{Uri.EscapeDataString(setItem)}/{Uri.EscapeDataString(setId)}", ct);
+
     // ---------- 供後續業務頁面使用的泛型方法 ----------
 
     public Task<ApiResult<T>> GetAsync<T>(string relativeUrl, CancellationToken ct = default)
